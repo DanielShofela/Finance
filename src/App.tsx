@@ -51,7 +51,7 @@ import {
 import { Transaction, TransactionType, CATEGORIES } from './types.ts';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { auth, db, loginWithGoogle, logout } from './lib/firebase.ts';
+import { auth, db, loginWithGoogle, logout, handleRedirectResponse } from './lib/firebase.ts';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { 
   collection, 
@@ -128,6 +128,9 @@ export default function App() {
 
   // Auth Listener
   useEffect(() => {
+    // Gérer le retour de redirection pour mobile
+    handleRedirectResponse();
+
     return onAuthStateChanged(auth, (u) => {
       setUser(u);
       setLoading(false);
@@ -274,6 +277,21 @@ export default function App() {
             <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-5 h-5" />
             Se connecter avec Google
           </button>
+          
+          <div className="pt-2">
+            <p className="text-xs text-slate-400">
+              Problème de connexion ?<br />
+              <a 
+                href={window.location.href} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-slate-600 font-medium underline"
+              >
+                Ouvrir dans un nouvel onglet
+              </a>
+            </p>
+          </div>
+
           <p className="text-[10px] text-slate-300 uppercase font-bold tracking-widest">Minimaliste • Sécurisé • Rapide</p>
         </motion.div>
       </div>
