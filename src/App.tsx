@@ -20,7 +20,9 @@ import {
   AlertCircle,
   LogOut,
   User as UserIcon,
-  Loader2
+  Loader2,
+  Trash2,
+  Edit2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -124,6 +126,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'summary' | 'history' | 'analytics'>('summary');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalType, setModalType] = useState<TransactionType>(TransactionType.EXPENSE);
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [period, setPeriod] = useState<'week' | 'month'>('month');
 
   // Auth Listener
@@ -237,16 +240,33 @@ export default function App() {
   const addTransaction = async (t: Omit<Transaction, 'id' | 'userId' | 'createdAt' | 'updatedAt'>) => {
     if (!user) return;
     try {
-      await addDoc(collection(db, 'transactions'), {
-        ...t,
-        userId: user.uid,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      });
+      if (editingTransaction) {
+        await runTransaction(db, async (transaction) => {
+          const docRef = doc(db, 'transactions', editingTransaction.id);
+          transaction.update(docRef, {
+            ...t,
+            updatedAt: serverTimestamp()
+          });
+        });
+      } else {
+        await addDoc(collection(db, 'transactions'), {
+          ...t,
+          userId: user.uid,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+      }
       setIsModalOpen(false);
+      setEditingTransaction(null);
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, 'transactions');
+      handleFirestoreError(error, editingTransaction ? OperationType.UPDATE : OperationType.CREATE, 'transactions');
     }
+  };
+
+  const handleEdit = (t: Transaction) => {
+    setEditingTransaction(t);
+    setModalType(t.type);
+    setIsModalOpen(true);
   };
 
   const deleteTransaction = async (id: string) => {
@@ -375,7 +395,12 @@ export default function App() {
                 </div>
                 <div className="space-y-3">
                   {transactions.slice(0, 5).map(t => (
-                    <TransactionItem key={t.id} transaction={t} />
+                    <TransactionItem 
+                      key={t.id} 
+                      transaction={t} 
+                      onDelete={() => deleteTransaction(t.id)}
+                      onEdit={() => handleEdit(t)}
+                    />
                   ))}
                   {transactions.length === 0 && (
                     <div className="text-center py-12 px-4 bg-white/30 rounded-3xl border border-dashed border-slate-200">
@@ -447,6 +472,7 @@ export default function App() {
                     key={t.id} 
                     transaction={t} 
                     onDelete={() => deleteTransaction(t.id)}
+                    onEdit={() => handleEdit(t)}
                     showDate
                   />
                 ))}
@@ -548,10 +574,15 @@ export default function App() {
                <div className="w-12 h-1.5 bg-slate-100 rounded-full mx-auto mb-6" />
                <header className="flex justify-between items-center mb-8">
                  <div>
-                   <h2 className="text-2xl font-semibold">Ajouter {modalType === TransactionType.INCOME ? 'un revenu' : 'une dépense'}</h2>
+                   <h2 className="text-2xl font-semibold">
+                     {editingTransaction ? 'Modifier' : 'Ajouter'} {modalType === TransactionType.INCOME ? 'un revenu' : 'une dépense'}
+                   </h2>
                    <p className="text-slate-400 text-sm">Saisissez les détails ci-dessous</p>
                  </div>
-                 <button onClick={() => setIsModalOpen(false)} className="bg-slate-50 p-2 rounded-full text-slate-400">
+                 <button 
+                  onClick={() => { setIsModalOpen(false); setEditingTransaction(null); }} 
+                  className="bg-slate-50 p-2 rounded-full text-slate-400"
+                >
                    <X size={20} />
                  </button>
                </header>
@@ -559,6 +590,7 @@ export default function App() {
                <TransactionForm 
                 type={modalType} 
                 onSubmit={addTransaction} 
+                initialData={editingTransaction}
                />
             </motion.div>
           </div>
@@ -568,13 +600,23 @@ export default function App() {
   );
 }
 
-function TransactionForm({ type, onSubmit }: { type: TransactionType, onSubmit: (t: Omit<Transaction, 'id' | 'userId' | 'createdAt' | 'updatedAt'>) => void }) {
-  const [amount, setAmount] = useState('');
-  const [category, setCategory] = useState(CATEGORIES[type][0]);
+function TransactionForm({ type, onSubmit, initialData }: { 
+  type: TransactionType, 
+  onSubmit: (t: Omit<Transaction, 'id' | 'userId' | 'createdAt' | 'updatedAt'>) => void,
+  initialData?: Transaction | null
+}) {
+  const [amount, setAmount] = useState(initialData ? initialData.amount.toString() : '');
+  const [category, setCategory] = useState(initialData ? initialData.category : CATEGORIES[type][0]);
   const [customCategory, setCustomCategory] = useState('');
-  const [showCustom, setShowCustom] = useState(false);
-  const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
-  const [description, setDescription] = useState('');
+  const [showCustom, setShowCustom] = useState(initialData ? !CATEGORIES[type].includes(initialData.category) : false);
+  const [date, setDate] = useState(initialData ? format(parseISO(initialData.date), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'));
+  const [description, setDescription] = useState(initialData?.description || '');
+
+  useEffect(() => {
+    if (initialData && showCustom && !CATEGORIES[type].includes(initialData.category)) {
+      setCustomCategory(initialData.category);
+    }
+  }, [initialData, showCustom, type]);
 
   const handleCategoryChange = (val: string) => {
     if (val === 'CUSTOM') {
@@ -693,52 +735,71 @@ interface TransactionItemProps {
   transaction: Transaction;
   showDate?: boolean;
   onDelete?: () => void | Promise<void>;
+  onEdit?: () => void;
   key?: React.Key;
 }
 
-function TransactionItem({ transaction, showDate, onDelete }: TransactionItemProps) {
+function TransactionItem({ transaction, showDate, onDelete, onEdit }: TransactionItemProps) {
   const isIncome = transaction.type === TransactionType.INCOME;
+  const [dragX, setDragX] = useState(0);
   
   return (
-    <motion.div 
-      initial={{ opacity: 0, y: 5 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="flex items-center gap-4 bg-white p-4 rounded-2xl shadow-sm border border-slate-100 group hover:border-slate-300 transition-all active:scale-[0.99]"
-    >
-      <div className={cn(
-        "w-11 h-11 rounded-2xl flex items-center justify-center transition-colors shadow-sm",
-        isIncome ? "bg-emerald-50 text-emerald-600 group-hover:bg-emerald-100" : "bg-rose-50 text-rose-600 group-hover:bg-rose-100"
-      )}>
-        {isIncome ? <IconIncome size={22} /> : <IconExpense size={22} />}
-      </div>
-      <div className="flex-1 min-w-0">
-        <h4 className="font-semibold text-slate-800 text-sm truncate">{transaction.description || transaction.category}</h4>
-        <div className="flex items-center gap-2">
-          {!transaction.description && <span className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded uppercase font-extrabold tracking-tighter">{transaction.category}</span>}
-          {showDate && <span className="text-[10px] text-slate-400 font-medium">{format(parseISO(transaction.date), 'dd MMM yyyy', { locale: fr })}</span>}
+    <div className="relative group overflow-hidden rounded-2xl">
+      {/* Background Actions */}
+      <div className="absolute inset-0 flex justify-between items-center px-6">
+        <div className="h-full bg-rose-500 text-white flex items-center gap-2 pl-4 flex-1">
+          <Trash2 size={24} />
+          <span className="text-xs font-bold uppercase">Supprimer</span>
+        </div>
+        <div className="h-full bg-slate-800 text-white flex items-center justify-end gap-2 pr-4 flex-1">
+          <span className="text-xs font-bold uppercase">Modifier</span>
+          <Edit2 size={24} />
         </div>
       </div>
-      <div className="text-right">
-        <p className={cn(
-          "font-bold text-sm tracking-tight",
-          isIncome ? "text-brand-success" : "text-brand-danger"
+
+      <motion.div 
+        drag="x"
+        dragConstraints={{ left: -100, right: 100 }}
+        dragElastic={0.4}
+        onDrag={(e, info) => setDragX(info.offset.x)}
+        onDragEnd={(e, info) => {
+          if (info.offset.x > 80 && onDelete) {
+            onDelete();
+          } else if (info.offset.x < -80 && onEdit) {
+            onEdit();
+          }
+        }}
+        initial={{ opacity: 0, y: 5 }}
+        animate={{ opacity: 1, y: 0, x: 0 }}
+        className="relative z-10 flex items-center gap-4 bg-white p-4 rounded-2xl shadow-sm border border-slate-100 group transition-all active:scale-[0.99] touch-none"
+      >
+        <div className={cn(
+          "w-11 h-11 rounded-2xl flex items-center justify-center transition-colors shadow-sm",
+          isIncome ? "bg-emerald-50 text-emerald-600 group-hover:bg-emerald-100" : "bg-rose-50 text-rose-600 group-hover:bg-rose-100"
         )}>
-          {isIncome ? '+' : '-'} {transaction.amount.toLocaleString('fr-FR', { minimumFractionDigits: 2 })}
-        </p>
-        <AnimatePresence>
-          {onDelete && (
-            <motion.button 
-              initial={{ opacity: 0 }}
-              whileHover={{ opacity: 1 }}
-              onClick={onDelete} 
-              className="text-[9px] text-rose-400 hover:text-rose-600 transition-colors uppercase font-bold underline cursor-pointer mt-0.5"
-            >
-              Supprimer
-            </motion.button>
-          )}
-        </AnimatePresence>
-      </div>
-    </motion.div>
+          {isIncome ? <IconIncome size={22} /> : <IconExpense size={22} />}
+        </div>
+        <div className="flex-1 min-w-0">
+          <h4 className="font-semibold text-slate-800 text-sm truncate">{transaction.description || transaction.category}</h4>
+          <div className="flex items-center gap-2">
+            {!transaction.description && <span className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded uppercase font-extrabold tracking-tighter">{transaction.category}</span>}
+            {showDate && <span className="text-[10px] text-slate-400 font-medium">{format(parseISO(transaction.date), 'dd MMM yyyy', { locale: fr })}</span>}
+          </div>
+        </div>
+        <div className="text-right">
+          <p className={cn(
+            "font-bold text-sm tracking-tight",
+            isIncome ? "text-brand-success" : "text-brand-danger"
+          )}>
+            {isIncome ? '+' : '-'} {transaction.amount.toLocaleString('fr-FR', { minimumFractionDigits: 0 })}
+          </p>
+          <div className="flex justify-end gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <Edit2 size={12} className="text-slate-300" />
+            <Trash2 size={12} className="text-slate-300" />
+          </div>
+        </div>
+      </motion.div>
+    </div>
   );
 }
 
