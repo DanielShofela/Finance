@@ -571,16 +571,29 @@ export default function App() {
 function TransactionForm({ type, onSubmit }: { type: TransactionType, onSubmit: (t: Omit<Transaction, 'id' | 'userId' | 'createdAt' | 'updatedAt'>) => void }) {
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState(CATEGORIES[type][0]);
+  const [customCategory, setCustomCategory] = useState('');
+  const [showCustom, setShowCustom] = useState(false);
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [description, setDescription] = useState('');
+
+  const handleCategoryChange = (val: string) => {
+    if (val === 'CUSTOM') {
+      setShowCustom(true);
+      setCategory('');
+    } else {
+      setShowCustom(false);
+      setCategory(val);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!amount) return;
+    const finalCategory = showCustom ? (customCategory || 'Autre') : category;
     onSubmit({
       amount: parseFloat(amount),
       type,
-      category,
+      category: finalCategory,
       date: new Date(date).toISOString(),
       description
     });
@@ -601,16 +614,46 @@ function TransactionForm({ type, onSubmit }: { type: TransactionType, onSubmit: 
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <div>
+        <div className={cn(showCustom ? "col-span-2" : "col-span-1")}>
           <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest block mb-2 px-1">Catégorie</label>
-          <select 
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 text-sm font-medium focus:ring-1 focus:ring-slate-900"
-          >
-            {CATEGORIES[type].map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
+          <div className="space-y-3">
+            <select 
+              value={showCustom ? 'CUSTOM' : category}
+              onChange={(e) => handleCategoryChange(e.target.value)}
+              className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 text-sm font-medium focus:ring-1 focus:ring-slate-900"
+            >
+              {CATEGORIES[type].map(c => <option key={c} value={c}>{c}</option>)}
+              <option value="CUSTOM">Personnalisé...</option>
+            </select>
+            
+            {showCustom && (
+              <motion.input
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                type="text"
+                placeholder="Nom de la catégorie"
+                value={customCategory}
+                onChange={(e) => setCustomCategory(e.target.value)}
+                className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 text-sm font-medium focus:ring-1 focus:ring-slate-900 border-l-4 border-l-slate-900"
+                autoFocus
+              />
+            )}
+          </div>
         </div>
+        {!showCustom && (
+          <div className="col-span-1">
+            <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest block mb-2 px-1">Date</label>
+            <input 
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 text-sm font-medium focus:ring-1 focus:ring-slate-900"
+            />
+          </div>
+        )}
+      </div>
+
+      {showCustom && (
         <div>
           <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest block mb-2 px-1">Date</label>
           <input 
@@ -620,7 +663,7 @@ function TransactionForm({ type, onSubmit }: { type: TransactionType, onSubmit: 
             className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 text-sm font-medium focus:ring-1 focus:ring-slate-900"
           />
         </div>
-      </div>
+      )}
 
       <div>
         <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest block mb-2 px-1">Note (optionnel)</label>
