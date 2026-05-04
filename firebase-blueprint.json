@@ -1,0 +1,54 @@
+{
+  "entities": {
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Un enregistrement de dépense ou de revenu.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "L'ID de l'utilisateur propriétaire de la transaction."
+        },
+        "amount": {
+          "type": "number",
+          "description": "Le montant de la transaction."
+        },
+        "type": {
+          "type": "string",
+          "enum": ["expense", "income"],
+          "description": "Le type de transaction (dépense ou revenu)."
+        },
+        "category": {
+          "type": "string",
+          "description": "La catégorie de la transaction."
+        },
+        "date": {
+          "type": "string",
+          "format": "date-time",
+          "description": "La date de la transaction (ISO string)."
+        },
+        "description": {
+          "type": "string",
+          "description": "Une note optionnelle."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Date de création système."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Date de mise à jour système."
+        }
+      },
+      "required": ["userId", "amount", "type", "category", "date"]
+    }
+  },
+  "firestore": {
+    "/transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "Collection des transactions financières des utilisateurs."
+    }
+  }
+}

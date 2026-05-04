@@ -1,0 +1,65 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helpers
+    function isSignedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Validation helper
+    function isValidTransaction(data) {
+      return data.keys().hasAll(['userId', 'amount', 'type', 'category', 'date', 'createdAt', 'updatedAt'])
+        && data.keys().size() <= 8
+        && data.userId == request.auth.uid
+        && data.amount is number && data.amount >= 0
+        && data.type in ['expense', 'income']
+        && data.category is string && data.category.size() <= 100
+        && data.date is string && data.date.size() <= 64
+        && (data.description == null || (data.description is string && data.description.size() <= 500))
+        && data.createdAt == request.time
+        && data.updatedAt == request.time;
+    }
+
+    match /transactions/{transactionId} {
+      allow create: if isSignedIn() 
+        && isValidId(transactionId)
+        && isValidTransaction(incoming());
+
+      allow update: if isSignedIn()
+        && isValidId(transactionId)
+        && isOwner(existing().userId)
+        && isValidTransaction(incoming())
+        && incoming().userId == existing().userId
+        && incoming().createdAt == existing().createdAt
+        && incoming().diff(existing()).affectedKeys().hasOnly(['amount', 'type', 'category', 'date', 'description', 'updatedAt']);
+
+      allow delete: if isOwner(existing().userId);
+
+      allow get: if isOwner(existing().userId);
+      
+      // Secure list query: forced filter by userId
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+  }
+}
