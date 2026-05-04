@@ -283,26 +283,11 @@ export default function App() {
           </div>
           <button 
             onClick={loginWithGoogle}
-            className="w-full flex items-center justify-center gap-3 bg-slate-900 py-4 px-6 rounded-2xl font-semibold text-white hover:bg-slate-800 transition-all shadow-lg active:scale-95 mb-4"
+            className="w-full flex items-center justify-center gap-3 bg-slate-900 py-4 px-6 rounded-2xl font-semibold text-white hover:bg-slate-800 transition-all shadow-lg active:scale-95"
           >
             <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-5 h-5 brightness-0 invert" />
             Se connecter avec Google
           </button>
-          
-          <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100 text-left">
-            <p className="text-xs text-amber-800 leading-relaxed">
-              <span className="font-bold block mb-1">📱 Conseil Mobile :</span>
-              Si la connexion ne se lance pas ou si la page se recharge sans effet, cliquez sur le bouton ci-dessous pour ouvrir l'app en plein écran.
-            </p>
-            <a 
-              href={window.location.href} 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="mt-3 inline-flex items-center gap-2 text-amber-900 font-bold text-xs uppercase tracking-wider bg-amber-200/50 py-2 px-4 rounded-lg hover:bg-amber-200 transition-colors"
-            >
-              Ouvrir en plein écran
-            </a>
-          </div>
 
           <p className="text-[10px] text-slate-300 uppercase font-bold tracking-widest">Minimaliste • Sécurisé • Rapide</p>
         </motion.div>
@@ -318,7 +303,7 @@ export default function App() {
           <div>
             <p className="text-slate-400 text-sm font-medium uppercase tracking-wider">Solde Actuel</p>
             <h1 className="text-4xl font-light tracking-tight mt-1">
-              {balance.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}
+              {balance.toLocaleString('fr-FR')} <span className="text-sm font-bold opacity-40">FCFA</span>
             </h1>
           </div>
           <div className="flex flex-col items-end gap-2">
@@ -355,7 +340,7 @@ export default function App() {
               <span className="text-[10px] font-bold uppercase">Revenus</span>
             </div>
             <p className="text-lg font-semibold">
-              {totals.income.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}
+              {totals.income.toLocaleString('fr-FR')} <span className="text-[10px] opacity-40">FCFA</span>
             </p>
           </div>
           <div className="p-4 bg-white rounded-2xl shadow-sm border border-slate-100 transition-all hover:border-rose-200">
@@ -364,7 +349,7 @@ export default function App() {
               <span className="text-[10px] font-bold uppercase">Dépenses</span>
             </div>
             <p className="text-lg font-semibold">
-              {totals.expense.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}
+              {totals.expense.toLocaleString('fr-FR')} <span className="text-[10px] opacity-40">FCFA</span>
             </p>
           </div>
         </div>
@@ -604,15 +589,14 @@ function TransactionForm({ type, onSubmit }: { type: TransactionType, onSubmit: 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="relative">
-        <span className="absolute left-6 top-1/2 -translate-y-1/2 text-2xl font-light text-slate-300">€</span>
+        <span className="absolute left-6 top-1/2 -translate-y-1/2 text-lg font-bold text-slate-300">FCFA</span>
         <input 
           type="number" 
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
-          placeholder="0.00"
-          className="w-full bg-slate-50 border-none rounded-2xl py-6 pl-12 pr-6 text-3xl font-light focus:ring-2 focus:ring-slate-900 transition-all placeholder:text-slate-200"
+          placeholder="0"
+          className="w-full bg-slate-50 border-none rounded-2xl py-6 pl-20 pr-6 text-3xl font-light focus:ring-2 focus:ring-slate-900 transition-all placeholder:text-slate-200"
           autoFocus
-          step="0.01"
         />
       </div>
 
@@ -727,7 +711,7 @@ function AnalyticCard({ title, item, type, isMin }: { title: string, item: any, 
           "text-xl font-bold",
           isIncome ? "text-brand-success" : "text-brand-danger"
         )}>
-          {amount ? amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' }) : '0 €'}
+          {amount ? `${amount.toLocaleString('fr-FR')} FCFA` : '0 FCFA'}
         </span>
         <span className="text-[10px] text-slate-400 font-medium">
           {item?.name || '---'}

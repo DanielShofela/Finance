@@ -11,8 +11,7 @@ import {
   GoogleAuthProvider, 
   signInWithPopup, 
   signInWithRedirect, 
-  getRedirectResult,
-  browserPopupBlockedError
+  getRedirectResult
 } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
