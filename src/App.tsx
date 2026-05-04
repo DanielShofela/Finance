@@ -128,8 +128,18 @@ export default function App() {
 
   // Auth Listener
   useEffect(() => {
-    // Gérer le retour de redirection pour mobile
-    handleRedirectResponse();
+    const checkRedirect = async () => {
+      setLoading(true);
+      try {
+        await handleRedirectResponse();
+      } catch (error) {
+        console.error("Redirect error:", error);
+      } finally {
+        // Le onAuthStateChanged prendra le relais
+      }
+    };
+    
+    checkRedirect();
 
     return onAuthStateChanged(auth, (u) => {
       setUser(u);
@@ -249,8 +259,9 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-brand-bg flex items-center justify-center">
-        <Loader2 className="animate-spin text-slate-400" size={40} />
+      <div className="min-h-screen bg-brand-bg flex flex-col items-center justify-center p-6 text-center">
+        <Loader2 className="animate-spin text-slate-400 mb-4" size={40} />
+        <p className="text-slate-500 font-medium animate-pulse">Vérification de l'accès...</p>
       </div>
     );
   }
@@ -272,24 +283,25 @@ export default function App() {
           </div>
           <button 
             onClick={loginWithGoogle}
-            className="w-full flex items-center justify-center gap-3 bg-white border border-slate-200 py-4 px-6 rounded-2xl font-semibold text-slate-700 hover:bg-slate-50 transition-all shadow-sm active:scale-95"
+            className="w-full flex items-center justify-center gap-3 bg-slate-900 py-4 px-6 rounded-2xl font-semibold text-white hover:bg-slate-800 transition-all shadow-lg active:scale-95 mb-4"
           >
-            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-5 h-5" />
+            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-5 h-5 brightness-0 invert" />
             Se connecter avec Google
           </button>
           
-          <div className="pt-2">
-            <p className="text-xs text-slate-400">
-              Problème de connexion ?<br />
-              <a 
-                href={window.location.href} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-slate-600 font-medium underline"
-              >
-                Ouvrir dans un nouvel onglet
-              </a>
+          <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100 text-left">
+            <p className="text-xs text-amber-800 leading-relaxed">
+              <span className="font-bold block mb-1">📱 Conseil Mobile :</span>
+              Si la connexion ne se lance pas ou si la page se recharge sans effet, cliquez sur le bouton ci-dessous pour ouvrir l'app en plein écran.
             </p>
+            <a 
+              href={window.location.href} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="mt-3 inline-flex items-center gap-2 text-amber-900 font-bold text-xs uppercase tracking-wider bg-amber-200/50 py-2 px-4 rounded-lg hover:bg-amber-200 transition-colors"
+            >
+              Ouvrir en plein écran
+            </a>
           </div>
 
           <p className="text-[10px] text-slate-300 uppercase font-bold tracking-widest">Minimaliste • Sécurisé • Rapide</p>
