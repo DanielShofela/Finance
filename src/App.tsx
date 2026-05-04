@@ -127,6 +127,7 @@ export default function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalType, setModalType] = useState<TransactionType>(TransactionType.EXPENSE);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
   const [period, setPeriod] = useState<'week' | 'month'>('month');
 
   // Auth Listener
@@ -398,7 +399,7 @@ export default function App() {
                     <TransactionItem 
                       key={t.id} 
                       transaction={t} 
-                      onDelete={() => deleteTransaction(t.id)}
+                      onDelete={() => setTransactionToDelete(t.id)}
                       onEdit={() => handleEdit(t)}
                     />
                   ))}
@@ -471,7 +472,7 @@ export default function App() {
                   <TransactionItem 
                     key={t.id} 
                     transaction={t} 
-                    onDelete={() => deleteTransaction(t.id)}
+                    onDelete={() => setTransactionToDelete(t.id)}
                     onEdit={() => handleEdit(t)}
                     showDate
                   />
@@ -552,6 +553,52 @@ export default function App() {
         <NavButton active={activeTab === 'history'} onClick={() => setActiveTab('history')} icon={<History size={20} />} label="Journal" />
         <NavButton active={activeTab === 'analytics'} onClick={() => setActiveTab('analytics')} icon={<ChartIcon size={20} />} label="Analyse" />
       </nav>
+
+      {/* Delete Confirmation Modal */}
+      <AnimatePresence>
+        {transactionToDelete && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-6">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setTransactionToDelete(null)}
+              className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="relative bg-white rounded-[32px] p-8 shadow-2xl w-full max-w-xs text-center"
+            >
+              <div className="w-16 h-16 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Trash2 size={32} />
+              </div>
+              <h3 className="text-xl font-bold text-slate-900 mb-2">Supprimer ?</h3>
+              <p className="text-slate-500 text-sm mb-8">Cette action est irréversible. Voulez-vous vraiment continuer ?</p>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setTransactionToDelete(null)}
+                  className="flex-1 py-3 px-4 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm transition-all active:scale-95"
+                >
+                  Annuler
+                </button>
+                <button 
+                  onClick={() => {
+                    if (transactionToDelete) {
+                      deleteTransaction(transactionToDelete);
+                      setTransactionToDelete(null);
+                    }
+                  }}
+                  className="flex-1 py-3 px-4 bg-rose-500 text-white rounded-xl font-bold text-sm shadow-lg shadow-rose-200 transition-all active:scale-95"
+                >
+                  Supprimer
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Modal */}
       <AnimatePresence>
