@@ -319,6 +319,40 @@ export default function App() {
     };
   }, [dailyData, transactions]);
 
+  // Derived Lists (Merged from transactions + saved collections)
+  const finalCategories = useMemo(() => {
+    const income = new Set<string>();
+    const expense = new Set<string>();
+    
+    // 1. From saved categories
+    userCategories.income.forEach(c => income.add(c));
+    userCategories.expense.forEach(c => expense.add(c));
+    
+    // 2. From transactions
+    transactions.forEach(t => {
+      if (t.type === TransactionType.INCOME) income.add(t.category);
+      else expense.add(t.category);
+    });
+    
+    return { 
+      income: Array.from(income).sort(), 
+      expense: Array.from(expense).sort() 
+    };
+  }, [userCategories, transactions]);
+
+  const finalNotes = useMemo(() => {
+    const notes = new Set<string>(userNotes);
+    
+    // Extract from transactions descriptions
+    transactions.forEach(t => {
+      if (t.description && t.description.trim()) {
+        notes.add(t.description.trim());
+      }
+    });
+    
+    return Array.from(notes).sort();
+  }, [userNotes, transactions]);
+
   const addTransaction = async (t: Omit<Transaction, 'id' | 'userId' | 'createdAt' | 'updatedAt'>) => {
     if (!user) return;
     
@@ -326,8 +360,8 @@ export default function App() {
     setIsModalOpen(false);
     
     try {
-      // Check and add new category
-      const currentCats = t.type === TransactionType.INCOME ? userCategories.income : userCategories.expense;
+      // Check and add new category only if not in the merged list
+      const currentCats = t.type === TransactionType.INCOME ? finalCategories.income : finalCategories.expense;
       if (t.category && !currentCats.includes(t.category)) {
         await addDoc(collection(db, 'categories'), {
           userId: user.uid,
@@ -337,8 +371,8 @@ export default function App() {
         });
       }
 
-      // Check and add new note
-      if (t.description && !userNotes.includes(t.description)) {
+      // Check and add new note only if not in the merged list
+      if (t.description && !finalNotes.includes(t.description.trim())) {
         await addDoc(collection(db, 'notes'), {
           userId: user.uid,
           text: t.description.trim(),
@@ -790,8 +824,8 @@ export default function App() {
                 type={modalType} 
                 onSubmit={addTransaction} 
                 initialData={editingTransaction}
-                availableCategories={modalType === TransactionType.INCOME ? userCategories.income : userCategories.expense}
-                availableNotes={userNotes}
+                availableCategories={modalType === TransactionType.INCOME ? finalCategories.income : finalCategories.expense}
+                availableNotes={finalNotes}
                />
             </motion.div>
           </div>
