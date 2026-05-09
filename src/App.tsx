@@ -854,6 +854,7 @@ function SuggestionInput({
   const filteredSuggestions = suggestions.filter(s => 
     s.toLowerCase().includes(value.toLowerCase()) && s !== value
   );
+  const showCreate = value.trim() !== '' && !suggestions.some(s => s.toLowerCase() === value.trim().toLowerCase());
 
   return (
     <div className="relative">
@@ -870,19 +871,40 @@ function SuggestionInput({
           setTimeout(() => setIsOpen(false), 200);
         }}
         onFocus={() => setIsOpen(true)}
-        className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 text-sm font-medium focus:ring-1 focus:ring-slate-900 transition-all"
+        className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 text-sm font-medium focus:ring-1 focus:ring-slate-900 transition-all font-sans"
         placeholder={placeholder}
         autoFocus={autoFocus}
       />
       
       <AnimatePresence>
-        {isOpen && filteredSuggestions.length > 0 && (
+        {isOpen && (filteredSuggestions.length > 0 || showCreate) && (
           <motion.ul 
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
             className="absolute z-30 w-full mt-2 bg-white rounded-2xl shadow-xl border border-slate-100 max-h-48 overflow-y-auto overflow-x-hidden py-2"
           >
+            {showCreate && (
+              <li>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onChange(value.trim());
+                    setIsOpen(false);
+                  }}
+                  className="w-full text-left px-4 py-3 text-sm hover:bg-slate-50 flex items-center gap-3 transition-colors border-b border-slate-50"
+                >
+                  <div className="w-6 h-6 rounded-lg bg-slate-900 flex items-center justify-center text-white">
+                    <Plus size={14} />
+                  </div>
+                  <div>
+                    <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-tight">Nouvelle entrée</span>
+                    <span className="font-bold text-slate-900">{value}</span>
+                  </div>
+                </button>
+              </li>
+            )}
+
             {filteredSuggestions.map((suggestion) => (
               <li key={suggestion}>
                 <button
