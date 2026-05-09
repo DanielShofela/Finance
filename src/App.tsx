@@ -856,10 +856,16 @@ function TransactionItem({ transaction, showDate, onDelete, onEdit }: Transactio
           {isIncome ? <IconIncome size={22} /> : <IconExpense size={22} />}
         </div>
         <div className="flex-1 min-w-0">
-          <h4 className="font-semibold text-slate-800 text-sm truncate">{transaction.description || transaction.category}</h4>
-          <div className="flex items-center gap-2">
-            {!transaction.description && <span className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded uppercase font-extrabold tracking-tighter">{transaction.category}</span>}
-            {showDate && <span className="text-[10px] text-slate-400 font-medium">{format(parseISO(transaction.date), 'dd MMM yyyy', { locale: fr })}</span>}
+          <h4 className="font-semibold text-slate-800 text-sm truncate">{transaction.category}</h4>
+          <div className="flex flex-col gap-0.5">
+            {transaction.description && (
+              <p className="text-[11px] text-slate-500 font-medium truncate">{transaction.description}</p>
+            )}
+            {showDate && (
+              <span className="text-[10px] text-slate-400 font-medium uppercase tracking-tight">
+                {format(parseISO(transaction.date), 'dd MMM yyyy', { locale: fr })}
+              </span>
+            )}
           </div>
         </div>
         <div className="text-right">
