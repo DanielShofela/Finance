@@ -321,36 +321,50 @@ export default function App() {
 
   // Derived Lists (Merged from transactions + saved collections)
   const finalCategories = useMemo(() => {
-    const income = new Set<string>();
-    const expense = new Set<string>();
+    const incomeMap = new Map<string, string>();
+    const expenseMap = new Map<string, string>();
     
+    const addNormalized = (val: string, map: Map<string, string>) => {
+      const trimmed = val.trim();
+      const key = trimmed.toLowerCase();
+      if (!map.has(key)) map.set(key, trimmed);
+    };
+
     // 1. From saved categories
-    userCategories.income.forEach(c => income.add(c));
-    userCategories.expense.forEach(c => expense.add(c));
+    userCategories.income.forEach(c => addNormalized(c, incomeMap));
+    userCategories.expense.forEach(c => addNormalized(c, expenseMap));
     
     // 2. From transactions
     transactions.forEach(t => {
-      if (t.type === TransactionType.INCOME) income.add(t.category);
-      else expense.add(t.category);
+      if (t.type === TransactionType.INCOME) addNormalized(t.category, incomeMap);
+      else addNormalized(t.category, expenseMap);
     });
     
     return { 
-      income: Array.from(income).sort(), 
-      expense: Array.from(expense).sort() 
+      income: Array.from(incomeMap.values()).sort((a, b) => a.localeCompare(b)), 
+      expense: Array.from(expenseMap.values()).sort((a, b) => a.localeCompare(b)) 
     };
   }, [userCategories, transactions]);
 
   const finalNotes = useMemo(() => {
-    const notes = new Set<string>(userNotes);
+    const notesMap = new Map<string, string>();
+    
+    const addNormalized = (val: string) => {
+      const trimmed = val.trim();
+      const key = trimmed.toLowerCase();
+      if (!notesMap.has(key)) notesMap.set(key, trimmed);
+    };
+
+    userNotes.forEach(addNormalized);
     
     // Extract from transactions descriptions
     transactions.forEach(t => {
-      if (t.description && t.description.trim()) {
-        notes.add(t.description.trim());
+      if (t.description) {
+        addNormalized(t.description);
       }
     });
     
-    return Array.from(notes).sort();
+    return Array.from(notesMap.values()).sort((a, b) => a.localeCompare(b));
   }, [userNotes, transactions]);
 
   const addTransaction = async (t: Omit<Transaction, 'id' | 'userId' | 'createdAt' | 'updatedAt'>) => {
