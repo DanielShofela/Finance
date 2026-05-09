@@ -50,6 +50,14 @@ service cloud.firestore {
         && data.createdAt == request.time;
     }
 
+    function isValidNote(data) {
+      return data.keys().hasAll(['userId', 'text', 'createdAt'])
+        && data.keys().size() == 3
+        && data.userId == request.auth.uid
+        && data.text is string && data.text.size() <= 200
+        && data.createdAt == request.time;
+    }
+
     match /transactions/{transactionId} {
       allow create: if isSignedIn() 
         && isValidId(transactionId)
@@ -75,6 +83,16 @@ service cloud.firestore {
       allow create: if isSignedIn() 
         && isValidId(categoryId)
         && isValidCategory(incoming());
+
+      allow get: if isOwner(existing().userId);
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow delete: if isOwner(existing().userId);
+    }
+
+    match /notes/{noteId} {
+      allow create: if isSignedIn() 
+        && isValidId(noteId)
+        && isValidNote(incoming());
 
       allow get: if isOwner(existing().userId);
       allow list: if isSignedIn() && resource.data.userId == request.auth.uid;

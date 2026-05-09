@@ -69,6 +69,27 @@
         }
       },
       "required": ["userId", "name", "type", "createdAt"]
+    },
+    "Note": {
+      "title": "Note",
+      "description": "Une description récurrente enregistrée par l'utilisateur.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "L'ID de l'utilisateur propriétaire de la note."
+        },
+        "text": {
+          "type": "string",
+          "description": "Le texte de la note/description."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Date de création système."
+        }
+      },
+      "required": ["userId", "text", "createdAt"]
     }
   },
   "firestore": {
@@ -79,6 +100,10 @@
     "/categories/{categoryId}": {
       "schema": "Category",
       "description": "Collection des catégories personnalisées des utilisateurs."
+    },
+    "/notes/{noteId}": {
+      "schema": "Note",
+      "description": "Collection des notes/descriptions récurrentes des utilisateurs."
     }
   }
 }

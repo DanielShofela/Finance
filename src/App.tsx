@@ -125,6 +125,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [userCategories, setUserCategories] = useState<{ income: string[], expense: string[] }>({ income: [], expense: [] });
+  const [userNotes, setUserNotes] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<'summary' | 'history' | 'analytics'>('summary');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalType, setModalType] = useState<TransactionType>(TransactionType.EXPENSE);
@@ -210,6 +211,29 @@ export default function App() {
     return unsubscribe;
   }, [user]);
 
+  // Notes Sync
+  useEffect(() => {
+    if (!user) {
+      setUserNotes([]);
+      return;
+    }
+
+    const q = query(
+      collection(db, 'notes'),
+      where('userId', '==', user.uid),
+      orderBy('text', 'asc')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const notes = snapshot.docs.map(d => d.data().text);
+      setUserNotes(notes);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'notes');
+    });
+
+    return unsubscribe;
+  }, [user]);
+
   // Derived Stats
   const totals = useMemo(() => {
     return transactions.reduce(
@@ -284,6 +308,15 @@ export default function App() {
           userId: user.uid,
           name: t.category,
           type: t.type,
+          createdAt: serverTimestamp()
+        });
+      }
+
+      // Check and add new note if it doesn't exist in userNotes
+      if (t.description && !userNotes.includes(t.description)) {
+        await addDoc(collection(db, 'notes'), {
+          userId: user.uid,
+          text: t.description,
           createdAt: serverTimestamp()
         });
       }
@@ -688,6 +721,7 @@ export default function App() {
                 onSubmit={addTransaction} 
                 initialData={editingTransaction}
                 availableCategories={modalType === TransactionType.INCOME ? userCategories.income : userCategories.expense}
+                availableNotes={userNotes}
                />
             </motion.div>
           </div>
@@ -697,11 +731,12 @@ export default function App() {
   );
 }
 
-function TransactionForm({ type, onSubmit, initialData, availableCategories }: { 
+function TransactionForm({ type, onSubmit, initialData, availableCategories, availableNotes }: { 
   type: TransactionType, 
   onSubmit: (t: Omit<Transaction, 'id' | 'userId' | 'createdAt' | 'updatedAt'>) => void,
   initialData?: Transaction | null,
-  availableCategories: string[]
+  availableCategories: string[],
+  availableNotes: string[]
 }) {
   const [amount, setAmount] = useState(initialData ? initialData.amount.toString() : '');
   const [category, setCategory] = useState(initialData ? initialData.category : (availableCategories[0] || ''));
@@ -822,13 +857,19 @@ function TransactionForm({ type, onSubmit, initialData, availableCategories }: {
 
       <div>
         <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest block mb-2 px-1">Note (optionnel)</label>
-        <input 
-          type="text" 
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="ex: Courses hebdomadaires"
-          className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 text-sm focus:ring-1 focus:ring-slate-900"
-        />
+        <div className="relative">
+          <input 
+            type="text"
+            list="notes-suggestions"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 text-sm font-medium focus:ring-1 focus:ring-slate-900"
+            placeholder="Ex: Course Carrefour, Loyer..."
+          />
+          <datalist id="notes-suggestions">
+            {availableNotes.map(n => <option key={n} value={n} />)}
+          </datalist>
+        </div>
       </div>
 
       <button 
