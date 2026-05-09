@@ -801,6 +801,76 @@ export default function App() {
   );
 }
 
+function SuggestionInput({ 
+  label, 
+  value, 
+  onChange, 
+  suggestions, 
+  placeholder, 
+  autoFocus = false 
+}: { 
+  label: string, 
+  value: string, 
+  onChange: (val: string) => void, 
+  suggestions: string[], 
+  placeholder?: string,
+  autoFocus?: boolean
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const filteredSuggestions = suggestions.filter(s => 
+    s.toLowerCase().includes(value.toLowerCase()) && s !== value
+  );
+
+  return (
+    <div className="relative">
+      <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest block mb-2 px-1">{label}</label>
+      <input 
+        type="text"
+        value={value}
+        onChange={(e) => {
+          onChange(e.target.value);
+          setIsOpen(true);
+        }}
+        onBlur={() => {
+          // Small delay to allow clicking a suggestion
+          setTimeout(() => setIsOpen(false), 200);
+        }}
+        onFocus={() => setIsOpen(true)}
+        className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 text-sm font-medium focus:ring-1 focus:ring-slate-900 transition-all"
+        placeholder={placeholder}
+        autoFocus={autoFocus}
+      />
+      
+      <AnimatePresence>
+        {isOpen && filteredSuggestions.length > 0 && (
+          <motion.ul 
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="absolute z-30 w-full mt-2 bg-white rounded-2xl shadow-xl border border-slate-100 max-h-48 overflow-y-auto overflow-x-hidden py-2"
+          >
+            {filteredSuggestions.map((suggestion) => (
+              <li key={suggestion}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onChange(suggestion);
+                    setIsOpen(false);
+                  }}
+                  className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 flex items-center gap-2 transition-colors"
+                >
+                  <div className="w-1.5 h-1.5 rounded-full bg-slate-300" />
+                  <span className="font-medium text-slate-700">{suggestion}</span>
+                </button>
+              </li>
+            ))}
+          </motion.ul>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 function TransactionForm({ type, onSubmit, initialData, availableCategories, availableNotes }: { 
   type: TransactionType, 
   onSubmit: (t: Omit<Transaction, 'id' | 'userId' | 'createdAt' | 'updatedAt'>) => void,
@@ -841,22 +911,13 @@ function TransactionForm({ type, onSubmit, initialData, availableCategories, ava
       </div>
 
       <div className="space-y-4">
-        <div>
-          <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest block mb-2 px-1">Catégorie</label>
-          <div className="relative">
-            <input 
-              type="text"
-              list="categories-list"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 text-sm font-medium focus:ring-1 focus:ring-slate-900"
-              placeholder="Sélectionner ou saisir..."
-            />
-            <datalist id="categories-list">
-              {availableCategories.map(c => <option key={c} value={c} />)}
-            </datalist>
-          </div>
-        </div>
+        <SuggestionInput 
+          label="Catégorie"
+          value={category}
+          onChange={setCategory}
+          suggestions={availableCategories}
+          placeholder="Saisir ou choisir une catégorie..."
+        />
 
         <div>
           <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest block mb-2 px-1">Date</label>
@@ -868,22 +929,13 @@ function TransactionForm({ type, onSubmit, initialData, availableCategories, ava
           />
         </div>
 
-        <div>
-          <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest block mb-2 px-1">Note (optionnel)</label>
-          <div className="relative">
-            <input 
-              type="text"
-              list="notes-list"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 text-sm font-medium focus:ring-1 focus:ring-slate-900"
-              placeholder="Sélectionner ou saisir..."
-            />
-            <datalist id="notes-list">
-              {availableNotes.map(n => <option key={n} value={n} />)}
-            </datalist>
-          </div>
-        </div>
+        <SuggestionInput 
+          label="Note (optionnel)"
+          value={description}
+          onChange={setDescription}
+          suggestions={availableNotes}
+          placeholder="Détails (ex: Carrefour, Loyer...)"
+        />
       </div>
 
       <button 
