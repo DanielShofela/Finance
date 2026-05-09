@@ -809,51 +809,20 @@ function TransactionForm({ type, onSubmit, initialData, availableCategories, ava
   availableNotes: string[]
 }) {
   const [amount, setAmount] = useState(initialData ? initialData.amount.toString() : '');
-  const [category, setCategory] = useState(initialData ? initialData.category : (availableCategories[0] || ''));
-  const [customCategory, setCustomCategory] = useState('');
-  const [showCustom, setShowCustom] = useState(initialData ? !availableCategories.includes(initialData.category) : (availableCategories.length === 0));
+  const [category, setCategory] = useState(initialData ? initialData.category : '');
   const [date, setDate] = useState(initialData ? format(parseISO(initialData.date), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'));
   const [description, setDescription] = useState(initialData?.description || '');
-
-  useEffect(() => {
-    if (initialData && showCustom && !availableCategories.includes(initialData.category)) {
-      setCustomCategory(initialData.category);
-    }
-  }, [initialData, showCustom, type, availableCategories]);
-
-  useEffect(() => {
-    if (!initialData && !showCustom && availableCategories.length > 0 && !availableCategories.includes(category)) {
-      setCategory(availableCategories[0]);
-    }
-  }, [availableCategories, initialData, showCustom, category]);
-
-  const handleCategoryChange = (val: string) => {
-    if (val === 'CUSTOM') {
-      setShowCustom(true);
-      setCustomCategory('');
-    } else {
-      setShowCustom(false);
-      setCategory(val);
-    }
-  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!amount) return;
     
-    let finalCategory = category;
-    if (showCustom) {
-      finalCategory = customCategory.trim() || 'Autre';
-    } else if (!category && availableCategories.length === 0) {
-      finalCategory = customCategory.trim() || 'Autre';
-    }
-
     onSubmit({
       amount: parseFloat(amount),
       type,
-      category: finalCategory,
+      category: category.trim() || 'Autre',
       date: new Date(date).toISOString(),
-      description
+      description: description.trim() || undefined
     });
   };
 
@@ -871,49 +840,24 @@ function TransactionForm({ type, onSubmit, initialData, availableCategories, ava
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="col-span-2">
+      <div className="space-y-4">
+        <div>
           <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest block mb-2 px-1">Catégorie</label>
-          <div className="space-y-3">
-            {availableCategories.length > 0 && (
-              <select 
-                value={showCustom ? 'CUSTOM' : category}
-                onChange={(e) => handleCategoryChange(e.target.value)}
-                className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 text-sm font-medium focus:ring-1 focus:ring-slate-900"
-              >
-                {availableCategories.map(c => <option key={c} value={c}>{c}</option>)}
-                <option value="CUSTOM">+ Nouvelle catégorie...</option>
-              </select>
-            )}
-            
-            {(showCustom || availableCategories.length === 0) && (
-              <div className="relative">
-                <motion.input
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  type="text"
-                  placeholder="Nom de la nouvelle catégorie"
-                  value={customCategory}
-                  onChange={(e) => setCustomCategory(e.target.value)}
-                  className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 text-sm font-medium focus:ring-1 focus:ring-slate-900 border-l-4 border-l-slate-900"
-                  autoFocus={availableCategories.length === 0 || showCustom}
-                />
-                {availableCategories.length > 0 && showCustom && (
-                  <button 
-                    type="button"
-                    onClick={() => setShowCustom(false)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 uppercase hover:text-slate-600"
-                  >
-                    Annuler
-                  </button>
-                )}
-              </div>
-            )}
+          <div className="relative">
+            <input 
+              type="text"
+              list="categories-list"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 text-sm font-medium focus:ring-1 focus:ring-slate-900"
+              placeholder="Sélectionner ou saisir..."
+            />
+            <datalist id="categories-list">
+              {availableCategories.map(c => <option key={c} value={c} />)}
+            </datalist>
           </div>
         </div>
-      </div>
 
-      <div className="grid grid-cols-1 gap-4">
         <div>
           <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest block mb-2 px-1">Date</label>
           <input 
@@ -923,22 +867,22 @@ function TransactionForm({ type, onSubmit, initialData, availableCategories, ava
             className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 text-sm font-medium focus:ring-1 focus:ring-slate-900"
           />
         </div>
-      </div>
 
-      <div>
-        <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest block mb-2 px-1">Note (optionnel)</label>
-        <div className="relative">
-          <input 
-            type="text"
-            list="notes-suggestions"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 text-sm font-medium focus:ring-1 focus:ring-slate-900"
-            placeholder="Ex: Course Carrefour, Loyer..."
-          />
-          <datalist id="notes-suggestions">
-            {availableNotes.map(n => <option key={n} value={n} />)}
-          </datalist>
+        <div>
+          <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest block mb-2 px-1">Note (optionnel)</label>
+          <div className="relative">
+            <input 
+              type="text"
+              list="notes-list"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 text-sm font-medium focus:ring-1 focus:ring-slate-900"
+              placeholder="Sélectionner ou saisir..."
+            />
+            <datalist id="notes-list">
+              {availableNotes.map(n => <option key={n} value={n} />)}
+            </datalist>
+          </div>
         </div>
       </div>
 
