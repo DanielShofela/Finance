@@ -290,20 +290,45 @@ export default function App() {
     const sortedExpenses = [...dailyData].sort((a, b) => b.expense - a.expense);
     const sortedIncomes = [...dailyData].sort((a, b) => b.income - a.income);
     
+    // Stats par catégorie
+    const categoryStats = transactions.reduce((acc, t) => {
+      const key = `${t.type}-${t.category}`;
+      if (!acc[key]) acc[key] = { name: t.category, type: t.type, total: 0, count: 0 };
+      acc[key].total += t.amount;
+      acc[key].count += 1;
+      return acc;
+    }, {} as Record<string, { name: string, type: TransactionType, total: number, count: number }>);
+
+    // Stats par note (raisons fréquentes)
+    const noteStats = transactions
+      .filter(t => t.type === TransactionType.EXPENSE && t.description)
+      .reduce((acc, t) => {
+        const key = t.description!;
+        if (!acc[key]) acc[key] = { text: key, total: 0, category: t.category };
+        acc[key].total += t.amount;
+        return acc;
+      }, {} as Record<string, { text: string, total: number, category: string }>);
+
     return {
       topExpenseDay: sortedExpenses[0],
       minExpenseDay: [...dailyData].filter(d => d.expense > 0).sort((a, b) => a.expense - b.expense)[0],
       topIncomeDay: sortedIncomes[0],
       minIncomeDay: [...dailyData].filter(d => d.income > 0).sort((a, b) => a.income - b.income)[0],
+      categoryBreakdown: Object.values(categoryStats).sort((a, b) => (b as any).total - (a as any).total),
+      noteBreakdown: Object.values(noteStats).sort((a, b) => (b as any).total - (a as any).total).slice(0, 5)
     };
-  }, [dailyData]);
+  }, [dailyData, transactions]);
 
   const addTransaction = async (t: Omit<Transaction, 'id' | 'userId' | 'createdAt' | 'updatedAt'>) => {
     if (!user) return;
+    
+    // Hide modal early for smoother UX
+    setIsModalOpen(false);
+    
     try {
-      // Check and add new category if it doesn't exist in userCategories
+      // Check and add new category
       const currentCats = t.type === TransactionType.INCOME ? userCategories.income : userCategories.expense;
-      if (!currentCats.includes(t.category)) {
+      if (t.category && !currentCats.includes(t.category)) {
         await addDoc(collection(db, 'categories'), {
           userId: user.uid,
           name: t.category,
@@ -312,11 +337,11 @@ export default function App() {
         });
       }
 
-      // Check and add new note if it doesn't exist in userNotes
+      // Check and add new note
       if (t.description && !userNotes.includes(t.description)) {
         await addDoc(collection(db, 'notes'), {
           userId: user.uid,
-          text: t.description,
+          text: t.description.trim(),
           createdAt: serverTimestamp()
         });
       }
@@ -335,9 +360,10 @@ export default function App() {
           updatedAt: serverTimestamp()
         });
       }
-      setIsModalOpen(false);
       setEditingTransaction(null);
     } catch (error) {
+      // Re-open if error
+      setIsModalOpen(true);
       handleFirestoreError(error, editingTransaction ? OperationType.UPDATE : OperationType.CREATE, 'transactions');
     }
   };
@@ -599,6 +625,50 @@ export default function App() {
                   type={TransactionType.INCOME} 
                   isMin
                 />
+              </div>
+
+              {/* Répartition par Catégorie */}
+              <div className="bg-white p-6 rounded-[32px] shadow-sm border border-slate-100">
+                <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-6">Répartition Dépenses</h4>
+                <div className="space-y-4">
+                  {analytics?.categoryBreakdown.filter(c => c.type === TransactionType.EXPENSE).map(cat => (
+                    <div key={`${cat.type}-${cat.name}`} className="space-y-2">
+                      <div className="flex justify-between items-end px-1">
+                        <span className="text-sm font-semibold text-slate-700">{cat.name}</span>
+                        <span className="text-sm font-bold text-slate-900">{cat.total.toLocaleString('fr-FR')} <span className="text-[9px] text-slate-400 font-medium">FCFA</span></span>
+                      </div>
+                      <div className="h-2.5 bg-slate-50 rounded-full overflow-hidden">
+                        <motion.div 
+                          initial={{ width: 0 }}
+                          animate={{ width: `${totals.expense > 0 ? (cat.total / totals.expense) * 100 : 0}%` }}
+                          className="h-full bg-slate-900 rounded-full"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Notes fréquentes */}
+              <div className="bg-white p-6 rounded-[32px] shadow-sm border border-slate-100">
+                <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-6">Raisons principales</h4>
+                <div className="space-y-4">
+                  {analytics?.noteBreakdown.map(note => (
+                    <div key={note.text} className="flex items-center gap-4 p-3 bg-slate-50 rounded-2xl">
+                      <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-slate-400 shadow-sm">
+                        <History size={16} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-slate-800 truncate">{note.text}</p>
+                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">{note.category}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-bold text-rose-500">{note.total.toLocaleString('fr-FR')}</p>
+                        <p className="text-[9px] font-bold text-slate-300 uppercase tracking-widest">TOTAL</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
