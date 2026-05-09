@@ -721,7 +721,7 @@ function TransactionForm({ type, onSubmit, initialData, availableCategories }: {
   const handleCategoryChange = (val: string) => {
     if (val === 'CUSTOM') {
       setShowCustom(true);
-      setCategory('');
+      setCustomCategory('');
     } else {
       setShowCustom(false);
       setCategory(val);
@@ -731,7 +731,14 @@ function TransactionForm({ type, onSubmit, initialData, availableCategories }: {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!amount) return;
-    const finalCategory = showCustom ? (customCategory || 'Autre') : category;
+    
+    let finalCategory = category;
+    if (showCustom) {
+      finalCategory = customCategory.trim() || 'Autre';
+    } else if (!category && availableCategories.length === 0) {
+      finalCategory = customCategory.trim() || 'Autre';
+    }
+
     onSubmit({
       amount: parseFloat(amount),
       type,
@@ -751,51 +758,53 @@ function TransactionForm({ type, onSubmit, initialData, availableCategories }: {
           onChange={(e) => setAmount(e.target.value)}
           placeholder="0"
           className="w-full bg-slate-50 border-none rounded-2xl py-6 pl-20 pr-6 text-3xl font-light focus:ring-2 focus:ring-slate-900 transition-all placeholder:text-slate-200"
-          autoFocus
+          autoFocus={!initialData}
         />
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <div className={cn(showCustom ? "col-span-2" : "col-span-1")}>
+        <div className="col-span-2">
           <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest block mb-2 px-1">Catégorie</label>
           <div className="space-y-3">
-            <select 
-              value={showCustom ? 'CUSTOM' : category}
-              onChange={(e) => handleCategoryChange(e.target.value)}
-              className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 text-sm font-medium focus:ring-1 focus:ring-slate-900"
-            >
-              {availableCategories.map(c => <option key={c} value={c}>{c}</option>)}
-              <option value="CUSTOM">Personnalisé...</option>
-            </select>
+            {availableCategories.length > 0 && (
+              <select 
+                value={showCustom ? 'CUSTOM' : category}
+                onChange={(e) => handleCategoryChange(e.target.value)}
+                className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 text-sm font-medium focus:ring-1 focus:ring-slate-900"
+              >
+                {availableCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                <option value="CUSTOM">+ Nouvelle catégorie...</option>
+              </select>
+            )}
             
-            {showCustom && (
-              <motion.input
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                type="text"
-                placeholder="Nom de la catégorie"
-                value={customCategory}
-                onChange={(e) => setCustomCategory(e.target.value)}
-                className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 text-sm font-medium focus:ring-1 focus:ring-slate-900 border-l-4 border-l-slate-900"
-                autoFocus
-              />
+            {(showCustom || availableCategories.length === 0) && (
+              <div className="relative">
+                <motion.input
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  type="text"
+                  placeholder="Nom de la nouvelle catégorie"
+                  value={customCategory}
+                  onChange={(e) => setCustomCategory(e.target.value)}
+                  className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 text-sm font-medium focus:ring-1 focus:ring-slate-900 border-l-4 border-l-slate-900"
+                  autoFocus={availableCategories.length === 0 || showCustom}
+                />
+                {availableCategories.length > 0 && showCustom && (
+                  <button 
+                    type="button"
+                    onClick={() => setShowCustom(false)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 uppercase hover:text-slate-600"
+                  >
+                    Annuler
+                  </button>
+                )}
+              </div>
             )}
           </div>
         </div>
-        {!showCustom && (
-          <div className="col-span-1">
-            <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest block mb-2 px-1">Date</label>
-            <input 
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 text-sm font-medium focus:ring-1 focus:ring-slate-900"
-            />
-          </div>
-        )}
       </div>
 
-      {showCustom && (
+      <div className="grid grid-cols-1 gap-4">
         <div>
           <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest block mb-2 px-1">Date</label>
           <input 
@@ -805,7 +814,7 @@ function TransactionForm({ type, onSubmit, initialData, availableCategories }: {
             className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 text-sm font-medium focus:ring-1 focus:ring-slate-900"
           />
         </div>
-      )}
+      </div>
 
       <div>
         <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest block mb-2 px-1">Note (optionnel)</label>
