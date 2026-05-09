@@ -62,6 +62,7 @@ import {
   onSnapshot, 
   addDoc, 
   deleteDoc, 
+  updateDoc,
   doc, 
   serverTimestamp, 
   orderBy,
@@ -123,6 +124,7 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [userCategories, setUserCategories] = useState<{ income: string[], expense: string[] }>({ income: [], expense: [] });
   const [activeTab, setActiveTab] = useState<'summary' | 'history' | 'analytics'>('summary');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalType, setModalType] = useState<TransactionType>(TransactionType.EXPENSE);
@@ -169,6 +171,40 @@ export default function App() {
       setTransactions(docs);
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'transactions');
+    });
+
+    return unsubscribe;
+  }, [user]);
+
+  // Categories Sync
+  useEffect(() => {
+    if (!user) {
+      setUserCategories({ income: [], expense: [] });
+      return;
+    }
+
+    const q = query(
+      collection(db, 'categories'),
+      where('userId', '==', user.uid),
+      orderBy('name', 'asc')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const income: string[] = [...CATEGORIES[TransactionType.INCOME]];
+      const expense: string[] = [...CATEGORIES[TransactionType.EXPENSE]];
+      
+      snapshot.docs.forEach(d => {
+        const data = d.data();
+        if (data.type === TransactionType.INCOME) {
+          if (!income.includes(data.name)) income.push(data.name);
+        } else {
+          if (!expense.includes(data.name)) expense.push(data.name);
+        }
+      });
+      
+      setUserCategories({ income, expense });
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'categories');
     });
 
     return unsubscribe;
@@ -241,13 +277,22 @@ export default function App() {
   const addTransaction = async (t: Omit<Transaction, 'id' | 'userId' | 'createdAt' | 'updatedAt'>) => {
     if (!user) return;
     try {
+      // Check and add new category if it doesn't exist in userCategories
+      const currentCats = t.type === TransactionType.INCOME ? userCategories.income : userCategories.expense;
+      if (!currentCats.includes(t.category)) {
+        await addDoc(collection(db, 'categories'), {
+          userId: user.uid,
+          name: t.category,
+          type: t.type,
+          createdAt: serverTimestamp()
+        });
+      }
+
       if (editingTransaction) {
-        await runTransaction(db, async (transaction) => {
-          const docRef = doc(db, 'transactions', editingTransaction.id);
-          transaction.update(docRef, {
-            ...t,
-            updatedAt: serverTimestamp()
-          });
+        const docRef = doc(db, 'transactions', editingTransaction.id);
+        await updateDoc(docRef, {
+          ...t,
+          updatedAt: serverTimestamp()
         });
       } else {
         await addDoc(collection(db, 'transactions'), {
@@ -638,6 +683,7 @@ export default function App() {
                 type={modalType} 
                 onSubmit={addTransaction} 
                 initialData={editingTransaction}
+                availableCategories={modalType === TransactionType.INCOME ? userCategories.income : userCategories.expense}
                />
             </motion.div>
           </div>
@@ -647,23 +693,30 @@ export default function App() {
   );
 }
 
-function TransactionForm({ type, onSubmit, initialData }: { 
+function TransactionForm({ type, onSubmit, initialData, availableCategories }: { 
   type: TransactionType, 
   onSubmit: (t: Omit<Transaction, 'id' | 'userId' | 'createdAt' | 'updatedAt'>) => void,
-  initialData?: Transaction | null
+  initialData?: Transaction | null,
+  availableCategories: string[]
 }) {
   const [amount, setAmount] = useState(initialData ? initialData.amount.toString() : '');
-  const [category, setCategory] = useState(initialData ? initialData.category : CATEGORIES[type][0]);
+  const [category, setCategory] = useState(initialData ? initialData.category : (availableCategories[0] || ''));
   const [customCategory, setCustomCategory] = useState('');
-  const [showCustom, setShowCustom] = useState(initialData ? !CATEGORIES[type].includes(initialData.category) : false);
+  const [showCustom, setShowCustom] = useState(initialData ? !availableCategories.includes(initialData.category) : (availableCategories.length === 0));
   const [date, setDate] = useState(initialData ? format(parseISO(initialData.date), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'));
   const [description, setDescription] = useState(initialData?.description || '');
 
   useEffect(() => {
-    if (initialData && showCustom && !CATEGORIES[type].includes(initialData.category)) {
+    if (initialData && showCustom && !availableCategories.includes(initialData.category)) {
       setCustomCategory(initialData.category);
     }
-  }, [initialData, showCustom, type]);
+  }, [initialData, showCustom, type, availableCategories]);
+
+  useEffect(() => {
+    if (!initialData && !showCustom && availableCategories.length > 0 && !availableCategories.includes(category)) {
+      setCategory(availableCategories[0]);
+    }
+  }, [availableCategories, initialData, showCustom, category]);
 
   const handleCategoryChange = (val: string) => {
     if (val === 'CUSTOM') {
@@ -711,7 +764,7 @@ function TransactionForm({ type, onSubmit, initialData }: {
               onChange={(e) => handleCategoryChange(e.target.value)}
               className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 text-sm font-medium focus:ring-1 focus:ring-slate-900"
             >
-              {CATEGORIES[type].map(c => <option key={c} value={c}>{c}</option>)}
+              {availableCategories.map(c => <option key={c} value={c}>{c}</option>)}
               <option value="CUSTOM">Personnalisé...</option>
             </select>
             
@@ -788,51 +841,17 @@ interface TransactionItemProps {
 
 function TransactionItem({ transaction, showDate, onDelete, onEdit }: TransactionItemProps) {
   const isIncome = transaction.type === TransactionType.INCOME;
-  const [dragX, setDragX] = useState(0);
+  const [isExpanded, setIsExpanded] = useState(false);
   
   return (
-    <div className="relative group overflow-hidden rounded-2xl">
-      {/* Background Actions */}
-      <div className="absolute inset-0 flex justify-between items-center px-6">
-        <motion.div 
-          style={{ opacity: dragX > 20 ? 1 : 0 }}
-          className="h-full bg-rose-500 text-white flex items-center gap-2 pl-4 flex-1"
-        >
-          <Trash2 size={24} />
-          <span className="text-xs font-bold uppercase text-white/90">Supprimer</span>
-        </motion.div>
-        <motion.div 
-          style={{ opacity: dragX < -20 ? 1 : 0 }}
-          className="h-full bg-slate-800 text-white flex items-center justify-end gap-2 pr-4 flex-1"
-        >
-          <span className="text-xs font-bold uppercase text-white/90">Modifier</span>
-          <Edit2 size={24} />
-        </motion.div>
-      </div>
-
-      <motion.div 
-        drag="x"
-        dragDirectionLock
-        dragMomentum={false}
-        dragConstraints={{ left: -120, right: 120 }}
-        dragElastic={0.08}
-        onDrag={(e, info) => setDragX(info.offset.x)}
-        onDragEnd={(e, info) => {
-          if (info.offset.x > 100 && onDelete) {
-            onDelete();
-          } else if (info.offset.x < -100 && onEdit) {
-            onEdit();
-          }
-          setDragX(0);
-        }}
-        initial={{ opacity: 0, y: 5 }}
-        animate={{ opacity: 1, y: 0, x: 0 }}
-        transition={{ type: "spring", damping: 25, stiffness: 350 }}
-        className="relative z-10 flex items-center gap-4 bg-white p-4 rounded-2xl shadow-sm border border-slate-100 group transition-all active:scale-[0.99] touch-none"
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+      <div 
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="flex items-center gap-4 p-4 transition-all active:scale-[0.99] cursor-pointer select-none"
       >
         <div className={cn(
           "w-11 h-11 rounded-2xl flex items-center justify-center transition-colors shadow-sm",
-          isIncome ? "bg-emerald-50 text-emerald-600 group-hover:bg-emerald-100" : "bg-rose-50 text-rose-600 group-hover:bg-rose-100"
+          isIncome ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"
         )}>
           {isIncome ? <IconIncome size={22} /> : <IconExpense size={22} />}
         </div>
@@ -850,12 +869,41 @@ function TransactionItem({ transaction, showDate, onDelete, onEdit }: Transactio
           )}>
             {isIncome ? '+' : '-'} {transaction.amount.toLocaleString('fr-FR', { minimumFractionDigits: 0 })}
           </p>
-          <div className="flex justify-end gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            <Edit2 size={12} className="text-slate-300" />
-            <Trash2 size={12} className="text-slate-300" />
-          </div>
+          <motion.div
+            animate={{ rotate: isExpanded ? 180 : 0 }}
+            className="inline-block"
+          >
+            <ChevronRight size={12} className="text-slate-300 transform rotate-90" />
+          </motion.div>
         </div>
-      </motion.div>
+      </div>
+      
+      <AnimatePresence>
+        {isExpanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="border-t border-slate-50 flex bg-slate-50/50"
+          >
+            <button 
+              onClick={(e) => { e.stopPropagation(); onEdit?.(); setIsExpanded(false); }}
+              className="flex-1 flex items-center justify-center gap-2 py-4 text-slate-600 hover:bg-slate-100 transition-colors font-bold text-[10px] uppercase tracking-widest"
+            >
+              <Edit2 size={14} className="text-slate-400" />
+              Modifier
+            </button>
+            <div className="w-[1px] bg-slate-100" />
+            <button 
+              onClick={(e) => { e.stopPropagation(); onDelete?.(); setIsExpanded(false); }}
+              className="flex-1 flex items-center justify-center gap-2 py-4 text-rose-500 hover:bg-rose-100 transition-colors font-bold text-[10px] uppercase tracking-widest"
+            >
+              <Trash2 size={14} className="text-rose-400" />
+              Supprimer
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

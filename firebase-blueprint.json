@@ -43,12 +43,42 @@
         }
       },
       "required": ["userId", "amount", "type", "category", "date"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Une catégorie de transaction personnalisée par l'utilisateur.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "L'ID de l'utilisateur propriétaire de la catégorie."
+        },
+        "name": {
+          "type": "string",
+          "description": "Le nom de la catégorie."
+        },
+        "type": {
+          "type": "string",
+          "enum": ["expense", "income"],
+          "description": "Le type de transaction associé à cette catégorie."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Date de création système."
+        }
+      },
+      "required": ["userId", "name", "type", "createdAt"]
     }
   },
   "firestore": {
     "/transactions/{transactionId}": {
       "schema": "Transaction",
       "description": "Collection des transactions financières des utilisateurs."
+    },
+    "/categories/{categoryId}": {
+      "schema": "Category",
+      "description": "Collection des catégories personnalisées des utilisateurs."
     }
   }
 }

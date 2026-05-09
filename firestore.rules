@@ -41,6 +41,15 @@ service cloud.firestore {
         && data.updatedAt == request.time;
     }
 
+    function isValidCategory(data) {
+      return data.keys().hasAll(['userId', 'name', 'type', 'createdAt'])
+        && data.keys().size() == 4
+        && data.userId == request.auth.uid
+        && data.name is string && data.name.size() <= 100
+        && data.type in ['expense', 'income']
+        && data.createdAt == request.time;
+    }
+
     match /transactions/{transactionId} {
       allow create: if isSignedIn() 
         && isValidId(transactionId)
@@ -60,6 +69,16 @@ service cloud.firestore {
       
       // Secure list query: forced filter by userId
       allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    match /categories/{categoryId} {
+      allow create: if isSignedIn() 
+        && isValidId(categoryId)
+        && isValidCategory(incoming());
+
+      allow get: if isOwner(existing().userId);
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow delete: if isOwner(existing().userId);
     }
   }
 }
