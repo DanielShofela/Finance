@@ -493,9 +493,10 @@ export default function App() {
                       <Tooltip 
                         contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
                         labelStyle={{ fontWeight: 'bold', marginBottom: '4px' }}
+                        labelFormatter={(value) => `Date : ${value}`}
                       />
-                      <Area type="monotone" dataKey="income" stroke="#10b981" fillOpacity={1} fill="url(#colorIncome)" strokeWidth={2} />
-                      <Area type="monotone" dataKey="expense" stroke="#ef4444" fillOpacity={1} fill="url(#colorExpense)" strokeWidth={2} />
+                      <Area name="Revenus" type="monotone" dataKey="income" stroke="#10b981" fillOpacity={1} fill="url(#colorIncome)" strokeWidth={2} />
+                      <Area name="Dépenses" type="monotone" dataKey="expense" stroke="#ef4444" fillOpacity={1} fill="url(#colorExpense)" strokeWidth={2} />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
@@ -574,8 +575,11 @@ export default function App() {
                     <BarChart data={dailyData}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                       <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
-                      <Tooltip cursor={{ fill: '#f8fafc' }} />
-                      <Bar dataKey="expense" radius={[4, 4, 0, 0]}>
+                      <Tooltip 
+                        cursor={{ fill: '#f8fafc' }} 
+                        formatter={(value: any) => [`${value.toLocaleString('fr-FR')} FCFA`, 'Dépenses']}
+                      />
+                      <Bar name="Dépenses" dataKey="expense" radius={[4, 4, 0, 0]}>
                         {dailyData.map((entry, index) => (
                            <Cell key={`cell-${index}`} fill={entry.expense > entry.income ? '#fda4af' : '#e2e8f0'} />
                         ))}
