@@ -37,7 +37,6 @@ service cloud.firestore {
         && data.category is string && data.category.size() <= 100
         && data.date is string && data.date.size() <= 64
         && (data.description == null || (data.description is string && data.description.size() <= 500))
-        && data.createdAt == request.time
         && data.updatedAt == request.time;
     }
 
@@ -61,7 +60,8 @@ service cloud.firestore {
     match /transactions/{transactionId} {
       allow create: if isSignedIn() 
         && isValidId(transactionId)
-        && isValidTransaction(incoming());
+        && isValidTransaction(incoming())
+        && incoming().createdAt == request.time;
 
       allow update: if isSignedIn()
         && isValidId(transactionId)

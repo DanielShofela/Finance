@@ -376,17 +376,17 @@ export default function App() {
     try {
       // Check and add new category only if not in the merged list
       const currentCats = t.type === TransactionType.INCOME ? finalCategories.income : finalCategories.expense;
-      if (t.category && !currentCats.includes(t.category)) {
+      if (t.category && !currentCats.some(c => c.toLowerCase() === t.category.trim().toLowerCase())) {
         await addDoc(collection(db, 'categories'), {
           userId: user.uid,
-          name: t.category,
+          name: t.category.trim(),
           type: t.type,
           createdAt: serverTimestamp()
         });
       }
 
       // Check and add new note only if not in the merged list
-      if (t.description && !finalNotes.includes(t.description.trim())) {
+      if (t.description && !finalNotes.some(n => n.toLowerCase() === t.description!.trim().toLowerCase())) {
         await addDoc(collection(db, 'notes'), {
           userId: user.uid,
           text: t.description.trim(),
