@@ -794,30 +794,40 @@ function TransactionItem({ transaction, showDate, onDelete, onEdit }: Transactio
     <div className="relative group overflow-hidden rounded-2xl">
       {/* Background Actions */}
       <div className="absolute inset-0 flex justify-between items-center px-6">
-        <div className="h-full bg-rose-500 text-white flex items-center gap-2 pl-4 flex-1">
+        <motion.div 
+          style={{ opacity: dragX > 20 ? 1 : 0 }}
+          className="h-full bg-rose-500 text-white flex items-center gap-2 pl-4 flex-1"
+        >
           <Trash2 size={24} />
-          <span className="text-xs font-bold uppercase">Supprimer</span>
-        </div>
-        <div className="h-full bg-slate-800 text-white flex items-center justify-end gap-2 pr-4 flex-1">
-          <span className="text-xs font-bold uppercase">Modifier</span>
+          <span className="text-xs font-bold uppercase text-white/90">Supprimer</span>
+        </motion.div>
+        <motion.div 
+          style={{ opacity: dragX < -20 ? 1 : 0 }}
+          className="h-full bg-slate-800 text-white flex items-center justify-end gap-2 pr-4 flex-1"
+        >
+          <span className="text-xs font-bold uppercase text-white/90">Modifier</span>
           <Edit2 size={24} />
-        </div>
+        </motion.div>
       </div>
 
       <motion.div 
         drag="x"
-        dragConstraints={{ left: -100, right: 100 }}
-        dragElastic={0.4}
+        dragDirectionLock
+        dragMomentum={false}
+        dragConstraints={{ left: -120, right: 120 }}
+        dragElastic={0.08}
         onDrag={(e, info) => setDragX(info.offset.x)}
         onDragEnd={(e, info) => {
-          if (info.offset.x > 80 && onDelete) {
+          if (info.offset.x > 100 && onDelete) {
             onDelete();
-          } else if (info.offset.x < -80 && onEdit) {
+          } else if (info.offset.x < -100 && onEdit) {
             onEdit();
           }
+          setDragX(0);
         }}
         initial={{ opacity: 0, y: 5 }}
         animate={{ opacity: 1, y: 0, x: 0 }}
+        transition={{ type: "spring", damping: 25, stiffness: 350 }}
         className="relative z-10 flex items-center gap-4 bg-white p-4 rounded-2xl shadow-sm border border-slate-100 group transition-all active:scale-[0.99] touch-none"
       >
         <div className={cn(
