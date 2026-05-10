@@ -139,6 +139,8 @@ export default function App() {
   const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
   const [budgetToDelete, setBudgetToDelete] = useState<string | null>(null);
   const [period, setPeriod] = useState<'week' | 'month'>('month');
+  const [historyStartDate, setHistoryStartDate] = useState<string>('');
+  const [historyEndDate, setHistoryEndDate] = useState<string>('');
 
   // Auth Listener
   useEffect(() => {
@@ -424,6 +426,15 @@ export default function App() {
     
     return Array.from(notesMap.values()).sort((a, b) => a.localeCompare(b));
   }, [userNotes, transactions]);
+
+  const filteredHistory = useMemo(() => {
+    return transactions.filter(t => {
+      const tDate = t.date; // ISO format or YYYY-MM-DD
+      if (historyStartDate && tDate < historyStartDate) return false;
+      if (historyEndDate && tDate > historyEndDate) return false;
+      return true;
+    });
+  }, [transactions, historyStartDate, historyEndDate]);
 
   const addTransaction = async (t: Omit<Transaction, 'id' | 'userId' | 'createdAt' | 'updatedAt'>) => {
     if (!user) return;
@@ -752,9 +763,41 @@ export default function App() {
               exit={{ opacity: 0, x: -20 }}
               className="space-y-6"
             >
-              <h3 className="text-xl font-semibold text-slate-800">Historique complet</h3>
+              <div className="flex justify-between items-center">
+                <h3 className="text-xl font-semibold text-slate-800">Historique</h3>
+                {(historyStartDate || historyEndDate) && (
+                  <button 
+                    onClick={() => { setHistoryStartDate(''); setHistoryEndDate(''); }}
+                    className="text-[9px] font-bold text-rose-500 uppercase tracking-widest px-3 py-1 bg-rose-50 rounded-full active:scale-95 transition-transform"
+                  >
+                    Réinitialiser
+                  </button>
+                )}
+              </div>
+
+              <div className="flex gap-3">
+                 <div className="flex-1 bg-white p-3 rounded-2xl border border-slate-100 shadow-sm focus-within:ring-2 focus-within:ring-slate-900/5 transition-all">
+                   <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Du</p>
+                   <input 
+                    type="date" 
+                    value={historyStartDate}
+                    onChange={(e) => setHistoryStartDate(e.target.value)}
+                    className="w-full bg-transparent text-xs font-bold text-slate-700 outline-none cursor-pointer"
+                   />
+                 </div>
+                 <div className="flex-1 bg-white p-3 rounded-2xl border border-slate-100 shadow-sm focus-within:ring-2 focus-within:ring-slate-900/5 transition-all">
+                   <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Au</p>
+                   <input 
+                    type="date" 
+                    value={historyEndDate}
+                    onChange={(e) => setHistoryEndDate(e.target.value)}
+                    className="w-full bg-transparent text-xs font-bold text-slate-700 outline-none cursor-pointer"
+                   />
+                 </div>
+              </div>
+
               <div className="space-y-4">
-                {transactions.map(t => (
+                {filteredHistory.map(t => (
                   <TransactionItem 
                     key={t.id} 
                     transaction={t} 
@@ -763,6 +806,13 @@ export default function App() {
                     showDate
                   />
                 ))}
+                {filteredHistory.length === 0 && (
+                  <div className="text-center py-20 bg-white/30 rounded-[40px] border border-dashed border-slate-200">
+                    <Calendar className="mx-auto text-slate-200 mb-4" size={48} />
+                    <h4 className="text-slate-700 font-bold mb-1">Aucun résultat</h4>
+                    <p className="text-slate-400 text-sm max-w-[180px] mx-auto">Essayez d'ajuster vos filtres de dates.</p>
+                  </div>
+                )}
               </div>
             </motion.div>
           )}
