@@ -22,7 +22,8 @@ import {
   User as UserIcon,
   Loader2,
   Trash2,
-  Edit2
+  Edit2,
+  Target
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -50,7 +51,7 @@ import {
   Bar,
   Cell
 } from 'recharts';
-import { Transaction, TransactionType, CATEGORIES } from './types.ts';
+import { Transaction, TransactionType, CATEGORIES, Budget } from './types.ts';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { auth, db, loginWithGoogle, logout, handleRedirectResponse } from './lib/firebase.ts';
@@ -124,13 +125,17 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [budgets, setBudgets] = useState<Budget[]>([]);
   const [userCategories, setUserCategories] = useState<{ income: string[], expense: string[] }>({ income: [], expense: [] });
   const [userNotes, setUserNotes] = useState<string[]>([]);
-  const [activeTab, setActiveTab] = useState<'summary' | 'history' | 'analytics'>('summary');
+  const [activeTab, setActiveTab] = useState<'summary' | 'history' | 'analytics' | 'budgets'>('summary');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isBudgetModalOpen, setIsBudgetModalOpen] = useState(false);
   const [modalType, setModalType] = useState<TransactionType>(TransactionType.EXPENSE);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [editingBudget, setEditingBudget] = useState<Budget | null>(null);
   const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
+  const [budgetToDelete, setBudgetToDelete] = useState<string | null>(null);
   const [period, setPeriod] = useState<'week' | 'month'>('month');
 
   // Auth Listener
@@ -172,6 +177,28 @@ export default function App() {
       setTransactions(docs);
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'transactions');
+    });
+
+    return unsubscribe;
+  }, [user]);
+
+  // Budgets Sync
+  useEffect(() => {
+    if (!user) {
+      setBudgets([]);
+      return;
+    }
+
+    const q = query(
+      collection(db, 'budgets'),
+      where('userId', '==', user.uid)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Budget));
+      setBudgets(docs);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'budgets');
     });
 
     return unsubscribe;
@@ -319,6 +346,35 @@ export default function App() {
     };
   }, [dailyData, transactions]);
 
+  const budgetProgress = useMemo(() => {
+    const now = new Date();
+    const weekInterval = { start: startOfWeek(now, { weekStartsOn: 1 }), end: endOfWeek(now, { weekStartsOn: 1 }) };
+    const monthInterval = { start: startOfMonth(now), end: endOfMonth(now) };
+
+    return budgets.map(budget => {
+      const interval = budget.period === 'weekly' ? weekInterval : monthInterval;
+      
+      const spent = transactions
+        .filter(t => 
+          t.type === TransactionType.EXPENSE && 
+          t.category.toLowerCase() === budget.category.toLowerCase() &&
+          isWithinInterval(parseISO(t.date), interval)
+        )
+        .reduce((sum, t) => sum + t.amount, 0);
+
+      const percentage = (spent / budget.amount) * 100;
+      
+      return {
+        ...budget,
+        spent,
+        percentage: Math.min(percentage, 100),
+        rawPercentage: percentage,
+        remaining: Math.max(budget.amount - spent, 0),
+        status: percentage > 100 ? 'exceeded' : percentage > 80 ? 'warning' : 'ok'
+      };
+    }).sort((a, b) => b.percentage - a.percentage);
+  }, [budgets, transactions]);
+
   // Derived Lists (Merged from transactions + saved collections)
   const finalCategories = useMemo(() => {
     const incomeMap = new Map<string, string>();
@@ -416,6 +472,31 @@ export default function App() {
     }
   };
 
+  const addBudget = async (b: Omit<Budget, 'id' | 'userId' | 'updatedAt'>) => {
+    if (!user) return;
+    setIsBudgetModalOpen(false);
+    
+    try {
+      if (editingBudget) {
+        const docRef = doc(db, 'budgets', editingBudget.id);
+        await updateDoc(docRef, {
+          ...b,
+          updatedAt: serverTimestamp()
+        });
+      } else {
+        await addDoc(collection(db, 'budgets'), {
+          ...b,
+          userId: user.uid,
+          updatedAt: serverTimestamp()
+        });
+      }
+      setEditingBudget(null);
+    } catch (error) {
+      setIsBudgetModalOpen(true);
+      handleFirestoreError(error, editingBudget ? OperationType.UPDATE : OperationType.CREATE, 'budgets');
+    }
+  };
+
   const handleEdit = (t: Transaction) => {
     setEditingTransaction(t);
     setModalType(t.type);
@@ -427,6 +508,14 @@ export default function App() {
       await deleteDoc(doc(db, 'transactions', id));
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `transactions/${id}`);
+    }
+  };
+
+  const deleteBudget = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'budgets', id));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `budgets/${id}`);
     }
   };
 
@@ -564,6 +653,48 @@ export default function App() {
                 </div>
               </section>
 
+              {budgetProgress.length > 0 && (
+                <section>
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-semibold text-slate-800">Suivi Budgets</h3>
+                    <button onClick={() => setActiveTab('budgets')} className="text-sm text-slate-400 font-medium flex items-center gap-1">
+                      Gérer <ChevronRight size={14} />
+                    </button>
+                  </div>
+                  <div className="flex gap-4 overflow-x-auto pb-2 -mx-2 px-2 scrollbar-hide">
+                    {budgetProgress.slice(0, 3).map(budget => (
+                      <div 
+                        key={budget.id} 
+                        className="min-w-[200px] bg-white p-4 rounded-3xl shadow-sm border border-slate-100 shrink-0"
+                      >
+                        <div className="flex justify-between items-start mb-2">
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate max-w-[120px]">{budget.category}</p>
+                          <span className={cn(
+                            "text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-tighter",
+                            budget.status === 'exceeded' ? "bg-rose-50 text-rose-500" : budget.status === 'warning' ? "bg-amber-50 text-amber-500" : "bg-emerald-50 text-emerald-500"
+                          )}>
+                            {Math.round(budget.rawPercentage)}%
+                          </span>
+                        </div>
+                        <div className="h-1.5 bg-slate-50 rounded-full overflow-hidden mb-2">
+                          <motion.div 
+                            initial={{ width: 0 }}
+                            animate={{ width: `${budget.percentage}%` }}
+                            className={cn(
+                              "h-full rounded-full",
+                              budget.status === 'exceeded' ? "bg-rose-500" : budget.status === 'warning' ? "bg-amber-500" : "bg-emerald-500"
+                            )}
+                          />
+                        </div>
+                        <p className="text-[11px] font-bold text-slate-800">
+                          {budget.remaining.toLocaleString('fr-FR')} <span className="text-[9px] text-slate-400">FCFA RESTANT</span>
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
               <section>
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-lg font-semibold text-slate-800">Vue d'ensemble</h3>
@@ -681,7 +812,7 @@ export default function App() {
                 <div className="space-y-4">
                   {analytics?.categoryBreakdown.filter(c => c.type === TransactionType.EXPENSE).map(cat => (
                     <div key={`${cat.type}-${cat.name}`} className="space-y-2">
-                      <div className="flex justify-between items-end px-1">
+                       <div className="flex justify-between items-end px-1">
                         <span className="text-sm font-semibold text-slate-700">{cat.name}</span>
                         <span className="text-sm font-bold text-slate-900">{cat.total.toLocaleString('fr-FR')} <span className="text-[9px] text-slate-400 font-medium">FCFA</span></span>
                       </div>
@@ -744,25 +875,110 @@ export default function App() {
               </div>
             </motion.div>
           )}
+
+          {activeTab === 'budgets' && (
+            <motion.div 
+              key="budgets"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="space-y-6"
+            >
+              <div className="flex justify-between items-center">
+                <h3 className="text-xl font-semibold text-slate-800">Mes Budgets</h3>
+                <button 
+                  onClick={() => { setEditingBudget(null); setIsBudgetModalOpen(true); }}
+                  className="bg-slate-900 text-white w-10 h-10 rounded-xl flex items-center justify-center shadow-lg active:scale-95"
+                >
+                  <Plus size={20} />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {budgetProgress.map(budget => (
+                  <div key={budget.id} className="bg-white p-6 rounded-[32px] shadow-sm border border-slate-100 space-y-4">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h4 className="font-bold text-slate-800 text-lg">{budget.category}</h4>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                          {budget.period === 'weekly' ? 'Hebdomadaire' : 'Mensuel'} • {budget.amount.toLocaleString('fr-FR')} FCFA
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={() => { setEditingBudget(budget); setIsBudgetModalOpen(true); }}
+                          className="p-2 text-slate-300 hover:text-slate-600 transition-colors"
+                        >
+                          <Edit2 size={16} />
+                        </button>
+                        <button 
+                          onClick={() => setBudgetToDelete(budget.id)}
+                          className="p-2 text-slate-300 hover:text-rose-500 transition-colors"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-end text-xs font-bold px-1">
+                        <span className={cn(
+                          budget.status === 'exceeded' ? "text-rose-500" : budget.status === 'warning' ? "text-amber-500" : "text-emerald-500"
+                        )}>
+                          {budget.spent.toLocaleString('fr-FR')} FCFA
+                        </span>
+                        <span className="text-slate-400">
+                          {Math.round(budget.rawPercentage)}%
+                        </span>
+                      </div>
+                      <div className="h-3 bg-slate-50 rounded-full overflow-hidden">
+                        <motion.div 
+                          initial={{ width: 0 }}
+                          animate={{ width: `${budget.percentage}%` }}
+                          className={cn(
+                            "h-full rounded-full transition-colors",
+                            budget.status === 'exceeded' ? "bg-rose-500" : budget.status === 'warning' ? "bg-amber-500" : "bg-emerald-500"
+                          )}
+                        />
+                      </div>
+                      <div className="flex justify-between text-[10px] font-medium text-slate-400 px-1">
+                        <span>Dépensé</span>
+                        <span>{budget.status === 'exceeded' ? 'Dépassé' : `Reste ${budget.remaining.toLocaleString('fr-FR')} FCFA`}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                {budgets.length === 0 && (
+                  <div className="text-center py-16 px-4 bg-white/30 rounded-[40px] border border-dashed border-slate-200">
+                    <Target className="mx-auto text-slate-200 mb-4" size={48} />
+                    <h4 className="text-slate-700 font-bold mb-1">Aucun budget défini</h4>
+                    <p className="text-slate-400 text-sm max-w-[200px] mx-auto">Définissez des limites par catégorie pour mieux contrôler vos dépenses.</p>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
         </AnimatePresence>
       </main>
 
       {/* Navigation Bar */}
-      <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto p-4 bg-white/80 backdrop-blur-lg border-t border-slate-100 flex justify-between z-10 px-8">
+      <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto p-4 bg-white/80 backdrop-blur-lg border-t border-slate-100 flex justify-between z-10 px-6">
         <NavButton active={activeTab === 'summary'} onClick={() => setActiveTab('summary')} icon={<LayoutDashboard size={20} />} label="Stats" />
         <NavButton active={activeTab === 'history'} onClick={() => setActiveTab('history')} icon={<History size={20} />} label="Journal" />
         <NavButton active={activeTab === 'analytics'} onClick={() => setActiveTab('analytics')} icon={<ChartIcon size={20} />} label="Analyse" />
+        <NavButton active={activeTab === 'budgets'} onClick={() => setActiveTab('budgets')} icon={<Target size={20} />} label="Budgets" />
       </nav>
 
       {/* Delete Confirmation Modal */}
       <AnimatePresence>
-        {transactionToDelete && (
+        {(transactionToDelete || budgetToDelete) && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center p-6">
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => setTransactionToDelete(null)}
+              onClick={() => { setTransactionToDelete(null); setBudgetToDelete(null); }}
               className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
             />
             <motion.div 
@@ -778,7 +994,7 @@ export default function App() {
               <p className="text-slate-500 text-sm mb-8">Cette action est irréversible. Voulez-vous vraiment continuer ?</p>
               <div className="flex gap-3">
                 <button 
-                  onClick={() => setTransactionToDelete(null)}
+                  onClick={() => { setTransactionToDelete(null); setBudgetToDelete(null); }}
                   className="flex-1 py-3 px-4 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm transition-all active:scale-95"
                 >
                   Annuler
@@ -789,12 +1005,60 @@ export default function App() {
                       deleteTransaction(transactionToDelete);
                       setTransactionToDelete(null);
                     }
+                    if (budgetToDelete) {
+                      deleteBudget(budgetToDelete);
+                      setBudgetToDelete(null);
+                    }
                   }}
                   className="flex-1 py-3 px-4 bg-rose-500 text-white rounded-xl font-bold text-sm shadow-lg shadow-rose-200 transition-all active:scale-95"
                 >
                   Supprimer
                 </button>
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Budget Modal */}
+      <AnimatePresence>
+        {isBudgetModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-end justify-center p-0">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsBudgetModalOpen(false)}
+              className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className="relative w-full max-w-md bg-white rounded-t-[32px] p-8 shadow-2xl overflow-hidden"
+            >
+               <div className="w-12 h-1.5 bg-slate-100 rounded-full mx-auto mb-6" />
+               <header className="flex justify-between items-center mb-8">
+                 <div>
+                   <h2 className="text-2xl font-semibold">
+                     {editingBudget ? 'Modifier le budget' : 'Définir un budget'}
+                   </h2>
+                   <p className="text-slate-400 text-sm">Contrôlez vos dépenses par catégorie</p>
+                 </div>
+                 <button 
+                  onClick={() => { setIsBudgetModalOpen(false); setEditingBudget(null); }} 
+                  className="bg-slate-50 p-2 rounded-full text-slate-400"
+                >
+                   <X size={20} />
+                 </button>
+               </header>
+               
+               <BudgetForm 
+                onSubmit={addBudget} 
+                initialData={editingBudget}
+                availableCategories={finalCategories.expense}
+               />
             </motion.div>
           </div>
         )}
@@ -1016,6 +1280,86 @@ function TransactionForm({ type, onSubmit, initialData, availableCategories, ava
         )}
       >
         Confirmer
+      </button>
+    </form>
+  );
+}
+
+function BudgetForm({ onSubmit, initialData, availableCategories }: { 
+  onSubmit: (b: Omit<Budget, 'id' | 'userId' | 'updatedAt'>) => void,
+  initialData?: Budget | null,
+  availableCategories: string[]
+}) {
+  const [amount, setAmount] = useState(initialData ? initialData.amount.toString() : '');
+  const [category, setCategory] = useState(initialData ? initialData.category : '');
+  const [period, setPeriod] = useState<'weekly' | 'monthly'>(initialData ? initialData.period : 'monthly');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!amount || !category) return;
+    
+    onSubmit({
+      amount: parseFloat(amount),
+      category: category.trim(),
+      period
+    });
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-6">
+      <div className="relative">
+        <span className="absolute left-6 top-1/2 -translate-y-1/2 text-lg font-bold text-slate-300">FCFA</span>
+        <input 
+          type="number" 
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          placeholder="Montant du budget"
+          className="w-full bg-slate-50 border-none rounded-2xl py-6 pl-20 pr-6 text-3xl font-light focus:ring-2 focus:ring-slate-900 transition-all placeholder:text-slate-200"
+          autoFocus={!initialData}
+        />
+      </div>
+
+      <div className="space-y-4">
+        <SuggestionInput 
+          label="Catégorie"
+          value={category}
+          onChange={setCategory}
+          suggestions={availableCategories}
+          placeholder="Sélectionner une catégorie..."
+        />
+
+        <div>
+          <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest block mb-2 px-1">Période</label>
+          <div className="grid grid-cols-2 gap-2">
+            <button 
+              type="button"
+              onClick={() => setPeriod('weekly')}
+              className={cn(
+                "py-3 rounded-xl text-sm font-bold transition-all border",
+                period === 'weekly' ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-400 border-slate-100 hover:bg-slate-50"
+              )}
+            >
+              Hebdomadaire
+            </button>
+            <button 
+              type="button"
+              onClick={() => setPeriod('monthly')}
+              className={cn(
+                "py-3 rounded-xl text-sm font-bold transition-all border",
+                period === 'monthly' ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-400 border-slate-100 hover:bg-slate-50"
+              )}
+            >
+              Mensuel
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <button 
+        type="submit" 
+        className="w-full py-4 rounded-2xl bg-slate-900 text-white font-semibold text-lg shadow-lg active:scale-[0.98] transition-all mt-4"
+      >
+        Enregistrer le budget
       </button>
     </form>
   );

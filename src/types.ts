@@ -29,3 +29,12 @@ export interface DailyStat {
   date: string;
   amount: number;
 }
+
+export interface Budget {
+  id: string;
+  userId: string;
+  category: string;
+  amount: number;
+  period: 'weekly' | 'monthly';
+  updatedAt: any;
+}

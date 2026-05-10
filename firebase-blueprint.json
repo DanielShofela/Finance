@@ -90,6 +90,36 @@
         }
       },
       "required": ["userId", "text", "createdAt"]
+    },
+    "Budget": {
+      "title": "Budget",
+      "description": "Un budget défini pour une catégorie spécifique sur une période donnée.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "L'ID de l'utilisateur propriétaire du budget."
+        },
+        "category": {
+          "type": "string",
+          "description": "La catégorie ciblée par le budget."
+        },
+        "amount": {
+          "type": "number",
+          "description": "Le montant du budget."
+        },
+        "period": {
+          "type": "string",
+          "enum": ["weekly", "monthly"],
+          "description": "La période du budget."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Date de mise à jour système."
+        }
+      },
+      "required": ["userId", "category", "amount", "period", "updatedAt"]
     }
   },
   "firestore": {
@@ -104,6 +134,10 @@
     "/notes/{noteId}": {
       "schema": "Note",
       "description": "Collection des notes/descriptions récurrentes des utilisateurs."
+    },
+    "/budgets/{budgetId}": {
+      "schema": "Budget",
+      "description": "Collection des budgets par catégorie des utilisateurs."
     }
   }
 }

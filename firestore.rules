@@ -57,6 +57,16 @@ service cloud.firestore {
         && data.createdAt == request.time;
     }
 
+    function isValidBudget(data) {
+      return data.keys().hasAll(['userId', 'category', 'amount', 'period', 'updatedAt'])
+        && data.keys().size() == 5
+        && data.userId == request.auth.uid
+        && data.category is string && data.category.size() <= 100
+        && data.amount is number && data.amount >= 0
+        && data.period in ['weekly', 'monthly']
+        && data.updatedAt == request.time;
+    }
+
     match /transactions/{transactionId} {
       allow create: if isSignedIn() 
         && isValidId(transactionId)
@@ -97,6 +107,23 @@ service cloud.firestore {
       allow get: if isOwner(existing().userId);
       allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
       allow delete: if isOwner(existing().userId);
+    }
+
+    match /budgets/{budgetId} {
+      allow create: if isSignedIn() 
+        && isValidId(budgetId)
+        && isValidBudget(incoming());
+
+      allow update: if isSignedIn()
+        && isValidId(budgetId)
+        && isOwner(existing().userId)
+        && isValidBudget(incoming())
+        && incoming().userId == existing().userId
+        && incoming().diff(existing()).affectedKeys().hasOnly(['category', 'amount', 'period', 'updatedAt']);
+
+      allow delete: if isOwner(existing().userId);
+      allow get: if isOwner(existing().userId);
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
     }
   }
 }
