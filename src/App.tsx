@@ -28,7 +28,10 @@ import {
   ChevronDown,
   XCircle,
   Bell,
-  BellOff
+  BellOff,
+  Download,
+  Smartphone,
+  Share
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -156,6 +159,37 @@ export default function App() {
   const [notifications, setNotifications] = useState<{ id: string, title: string, message: string, type: 'warning' | 'error' }[]>([]);
   const [notifiedBudgets, setNotifiedBudgets] = useState<Record<string, 'none' | 'warning' | 'exceeded'>>({});
   const [browserNotificationsEnabled, setBrowserNotificationsEnabled] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showInstallGuide, setShowInstallGuide] = useState(false);
+  const [isIOS, setIsIOS] = useState(false);
+
+  // PWA & iOS Detection
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    // Detect iOS
+    const isIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+    setIsIOS(isIOSDevice);
+
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setDeferredPrompt(null);
+      }
+    } else {
+      setShowInstallGuide(true);
+    }
+  };
 
   // Check browser notification permission on mount
   useEffect(() => {
@@ -729,6 +763,14 @@ export default function App() {
                   {browserNotificationsEnabled ? <Bell size={18} /> : <BellOff size={18} />}
                 </button>
               )}
+              <button 
+                onClick={handleInstallClick}
+                className="flex items-center gap-2 p-2 px-3 rounded-full bg-slate-900 text-white text-[10px] font-bold uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg shadow-slate-200"
+                title="Installer l'application"
+              >
+                <Download size={14} />
+                <span className="hidden sm:inline">Installer</span>
+              </button>
               <button 
                 onClick={logout}
                 className="text-slate-400 p-2 hover:text-slate-600 transition-colors"
@@ -1383,6 +1425,79 @@ export default function App() {
           ))}
         </AnimatePresence>
       </div>
+
+      {/* Installation Guide Modal */}
+      <AnimatePresence>
+        {showInstallGuide && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-end sm:items-center justify-center p-4"
+            onClick={() => setShowInstallGuide(false)}
+          >
+            <motion.div 
+              initial={{ y: 100, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 100, opacity: 0 }}
+              className="bg-white w-full max-w-sm rounded-[40px] p-8 shadow-2xl relative overflow-hidden"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="absolute top-0 right-0 p-8">
+                <button onClick={() => setShowInstallGuide(false)} className="text-slate-300 hover:text-slate-900 transition-colors">
+                  <XCircle size={24} />
+                </button>
+              </div>
+
+              <div className="text-center space-y-6">
+                <div className="w-20 h-20 bg-slate-900 rounded-3xl flex items-center justify-center mx-auto shadow-xl rotate-3">
+                  <Smartphone size={40} className="text-white" />
+                </div>
+                
+                <div className="space-y-2">
+                  <h3 className="text-2xl font-bold text-slate-900 italic">Installer l'App</h3>
+                  <p className="text-slate-500 text-sm leading-relaxed">
+                    Ajoutez Finance Master à votre écran d'accueil pour une expérience optimale.
+                  </p>
+                </div>
+
+                <div className="bg-slate-50 p-6 rounded-[32px] text-left space-y-4 border border-slate-100">
+                  {isIOS ? (
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-4">
+                        <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center text-xs font-bold shadow-sm border border-slate-100 italic">1</div>
+                        <p className="text-xs text-slate-600 font-medium">Touchez le bouton <span className="p-1 px-2 bg-white rounded-lg border border-slate-100 inline-flex items-center gap-1 shadow-xs font-bold text-blue-500"><Share size={12} /> Partager</span> dans Safari.</p>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center text-xs font-bold shadow-sm border border-slate-100 italic">2</div>
+                        <p className="text-xs text-slate-600 font-medium">Défilez vers le bas et choisissez <span className="font-bold text-slate-900 italic">"Sur l'écran d'accueil"</span>.</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-4">
+                        <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center text-xs font-bold shadow-sm border border-slate-100 italic">1</div>
+                        <p className="text-xs text-slate-600 font-medium">Cliquez sur le bouton <span className="font-bold text-slate-900 italic">Installer</span> en haut de l'écran.</p>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center text-xs font-bold shadow-sm border border-slate-100 italic">2</div>
+                        <p className="text-xs text-slate-600 font-medium">Si rien ne se passe, ouvrez les options de votre navigateur et choisissez <span className="font-bold text-slate-900 italic">"Installer l'application"</span>.</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <button 
+                  onClick={() => setShowInstallGuide(false)}
+                  className="w-full py-4 bg-slate-900 text-white rounded-2xl font-bold text-xs uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg"
+                >
+                  J'ai compris
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Delete Confirmation Modal */}
       <AnimatePresence>
