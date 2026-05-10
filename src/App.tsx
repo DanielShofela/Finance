@@ -49,7 +49,9 @@ import {
   ResponsiveContainer,
   BarChart,
   Bar,
-  Cell
+  Cell,
+  PieChart,
+  Pie
 } from 'recharts';
 import { Transaction, TransactionType, CATEGORIES, Budget } from './types.ts';
 import { clsx, type ClassValue } from 'clsx';
@@ -804,6 +806,73 @@ export default function App() {
                   type={TransactionType.INCOME} 
                   isMin
                 />
+              </div>
+
+              {/* Pie Chart Analysis */}
+              <div className="bg-white p-6 rounded-[32px] shadow-sm border border-slate-100 flex flex-col items-center">
+                <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 w-full">Visualisation Dépenses</h4>
+                <div className="w-full h-[280px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={analytics?.categoryBreakdown.filter(c => c.type === TransactionType.EXPENSE)}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={65}
+                        outerRadius={95}
+                        paddingAngle={6}
+                        dataKey="total"
+                        nameKey="name"
+                        stroke="none"
+                        animationBegin={200}
+                        animationDuration={1500}
+                      >
+                        {analytics?.categoryBreakdown.filter(c => c.type === TransactionType.EXPENSE).map((_, index) => (
+                          <Cell 
+                            key={`cell-${index}`} 
+                            fill={[
+                              '#0f172a', // slate-900
+                              '#6366f1', // indigo-500
+                              '#f59e0b', // amber-500
+                              '#10b981', // emerald-500
+                              '#f43f5e', // rose-500
+                              '#8b5cf6', // violet-500
+                              '#ec4899', // pink-500
+                              '#06b6d4', // cyan-500
+                            ][index % 8]} 
+                          />
+                        ))}
+                      </Pie>
+                      <Tooltip 
+                        contentStyle={{ 
+                          borderRadius: '20px', 
+                          border: 'none', 
+                          boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
+                          padding: '12px 16px',
+                          fontSize: '12px',
+                          fontWeight: '600'
+                        }}
+                        itemStyle={{ color: '#0f172a' }}
+                        formatter={(value: number) => [`${value.toLocaleString('fr-FR')} FCFA`, '']}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                
+                {/* Visual Legend */}
+                <div className="grid grid-cols-2 gap-x-6 gap-y-2 mt-2 w-full px-2">
+                  {analytics?.categoryBreakdown.filter(c => c.type === TransactionType.EXPENSE).map((cat, index) => (
+                    <div key={cat.name} className="flex items-center gap-2">
+                      <div 
+                        className="w-2 h-2 rounded-full shrink-0" 
+                        style={{ backgroundColor: [
+                          '#0f172a', '#6366f1', '#f59e0b', '#10b981', '#f43f5e', '#8b5cf6', '#ec4899', '#06b6d4'
+                        ][index % 8] }} 
+                      />
+                      <span className="text-[10px] font-bold text-slate-500 truncate">{cat.name}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               {/* Répartition par Catégorie */}
