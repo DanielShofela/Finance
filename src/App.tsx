@@ -162,6 +162,7 @@ export default function App() {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallGuide, setShowInstallGuide] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(false);
 
   // PWA & iOS Detection
   useEffect(() => {
@@ -171,6 +172,14 @@ export default function App() {
     };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    // Detect Standalone
+    const checkStandalone = () => {
+      const isStandaloneMode = window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone || document.referrer.includes('android-app://');
+      setIsStandalone(!!isStandaloneMode);
+    };
+    
+    checkStandalone();
 
     // Detect iOS
     const isIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
@@ -765,11 +774,16 @@ export default function App() {
               )}
               <button 
                 onClick={handleInstallClick}
-                className="flex items-center gap-2 p-2 px-3 rounded-full bg-slate-900 text-white text-[10px] font-bold uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg shadow-slate-200"
-                title="Installer l'application"
+                className={cn(
+                  "flex items-center gap-2 p-2 px-3 rounded-full transition-all shadow-lg",
+                  isStandalone 
+                    ? "bg-emerald-500 text-white text-[10px] font-bold uppercase tracking-widest shadow-emerald-200" 
+                    : "bg-slate-900 text-white text-[10px] font-bold uppercase tracking-widest hover:bg-slate-800 shadow-slate-200"
+                )}
+                title={isStandalone ? "Application installée" : "Installer l'application"}
               >
-                <Download size={14} />
-                <span className="hidden sm:inline">Installer</span>
+                {isStandalone ? <Smartphone size={14} /> : <Download size={14} />}
+                <span className="hidden sm:inline">{isStandalone ? 'Installé' : 'Installer'}</span>
               </button>
               <button 
                 onClick={logout}
