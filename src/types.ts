@@ -21,8 +21,8 @@ export interface Transaction {
 }
 
 export const CATEGORIES = {
-  [TransactionType.EXPENSE]: [],
-  [TransactionType.INCOME]: []
+  [TransactionType.EXPENSE]: ['Nourriture', 'Transport', 'Loyer', 'Loisirs', 'Santé', 'Éducation', 'Shopping', 'Factures', 'Autre'],
+  [TransactionType.INCOME]: ['Salaire', 'Business', 'Cadeau', 'Remboursement', 'Vente', 'Autre']
 };
 
 export interface DailyStat {

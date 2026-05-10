@@ -516,28 +516,28 @@ export default function App() {
 
   // Derived Lists (Merged from transactions + saved collections)
   const finalCategories = useMemo(() => {
-    const incomeMap = new Map<string, string>();
-    const expenseMap = new Map<string, string>();
+    const categoryMap = new Map<string, string>();
     
-    const addNormalized = (val: string, map: Map<string, string>) => {
+    const addNormalized = (val: string) => {
       const trimmed = val.trim();
       const key = trimmed.toLowerCase();
-      if (!map.has(key)) map.set(key, trimmed);
+      if (!categoryMap.has(key)) categoryMap.set(key, trimmed);
     };
 
-    // 1. From saved categories
-    userCategories.income.forEach(c => addNormalized(c, incomeMap));
-    userCategories.expense.forEach(c => addNormalized(c, expenseMap));
+    // 1. From saved categories (both income and expense)
+    userCategories.income.forEach(addNormalized);
+    userCategories.expense.forEach(addNormalized);
     
-    // 2. From transactions
+    // 2. From all transactions
     transactions.forEach(t => {
-      if (t.type === TransactionType.INCOME) addNormalized(t.category, incomeMap);
-      else addNormalized(t.category, expenseMap);
+      addNormalized(t.category);
     });
     
+    const sortedCategories = Array.from(categoryMap.values()).sort((a, b) => a.localeCompare(b));
+    
     return { 
-      income: Array.from(incomeMap.values()).sort((a, b) => a.localeCompare(b)), 
-      expense: Array.from(expenseMap.values()).sort((a, b) => a.localeCompare(b)) 
+      income: sortedCategories, 
+      expense: sortedCategories 
     };
   }, [userCategories, transactions]);
 
@@ -579,8 +579,7 @@ export default function App() {
     
     try {
       // Check and add new category only if not in the merged list
-      const currentCats = t.type === TransactionType.INCOME ? finalCategories.income : finalCategories.expense;
-      if (t.category && !currentCats.some(c => c.toLowerCase() === t.category.trim().toLowerCase())) {
+      if (t.category && !finalCategories.income.some(c => c.toLowerCase() === t.category.trim().toLowerCase())) {
         await addDoc(collection(db, 'categories'), {
           userId: user.uid,
           name: t.category.trim(),
