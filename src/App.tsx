@@ -26,7 +26,9 @@ import {
   Target,
   Filter,
   ChevronDown,
-  XCircle
+  XCircle,
+  Bell,
+  BellOff
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -151,6 +153,16 @@ export default function App() {
   const [analyticsTypeFilter, setAnalyticsTypeFilter] = useState<'all' | TransactionType>('all');
   const [analyticsCategoryFilter, setAnalyticsCategoryFilter] = useState<string[]>([]);
   const [isFilterExpanded, setIsFilterExpanded] = useState(false);
+  const [notifications, setNotifications] = useState<{ id: string, title: string, message: string, type: 'warning' | 'error' }[]>([]);
+  const [notifiedBudgets, setNotifiedBudgets] = useState<Record<string, 'none' | 'warning' | 'exceeded'>>({});
+  const [browserNotificationsEnabled, setBrowserNotificationsEnabled] = useState(false);
+
+  // Check browser notification permission on mount
+  useEffect(() => {
+    if ('Notification' in window) {
+      setBrowserNotificationsEnabled(Notification.permission === 'granted');
+    }
+  }, []);
 
   // Auth Listener
   useEffect(() => {
@@ -434,6 +446,7 @@ export default function App() {
         .reduce((sum, t) => sum + t.amount, 0);
 
       const percentage = (spent / budget.amount) * 100;
+      const status = percentage >= 100 ? 'exceeded' : percentage >= 80 ? 'warning' : 'ok';
       
       return {
         ...budget,
@@ -441,10 +454,65 @@ export default function App() {
         percentage: Math.min(percentage, 100),
         rawPercentage: percentage,
         remaining: Math.max(budget.amount - spent, 0),
-        status: percentage > 100 ? 'exceeded' : percentage > 80 ? 'warning' : 'ok'
+        status
       };
     }).sort((a, b) => b.percentage - a.percentage);
   }, [budgets, transactions]);
+
+  // Budget Monitor Effect
+  useEffect(() => {
+    if (!user || budgetProgress.length === 0) return;
+
+    budgetProgress.forEach(budget => {
+      const lastStatus = notifiedBudgets[budget.id] || 'none';
+      
+      if (budget.status === 'exceeded' && lastStatus !== 'exceeded') {
+        triggerNotification(
+          budget.id,
+          'Budget Dépassé 🚨',
+          `Vous avez dépassé votre budget pour "${budget.category}".`,
+          'exceeded'
+        );
+      } else if (budget.status === 'warning' && lastStatus === 'none') {
+        triggerNotification(
+          budget.id,
+          'Alerte Budget ⚠️',
+          `Vous avez utilisé plus de 80% de votre budget "${budget.category}".`,
+          'warning'
+        );
+      }
+    });
+  }, [budgetProgress, user]);
+
+  const triggerNotification = (id: string, title: string, message: string, status: 'warning' | 'exceeded') => {
+    // 1. Browser Notification
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification(title, { body: message });
+    }
+
+    // 2. In-App Notification (Toast)
+    const newNotif = {
+      id: Math.random().toString(36).substr(2, 9),
+      title,
+      message,
+      type: status === 'exceeded' ? 'error' as const : 'warning' as const
+    };
+    
+    setNotifications(prev => [newNotif, ...prev]);
+    setNotifiedBudgets(prev => ({ ...prev, [id]: status }));
+
+    // Auto-remove after 6 seconds
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== newNotif.id));
+    }, 6000);
+  };
+
+  const requestNotificationPermission = async () => {
+    if (!('Notification' in window)) return;
+    
+    const permission = await Notification.requestPermission();
+    setBrowserNotificationsEnabled(permission === 'granted');
+  };
 
   // Derived Lists (Merged from transactions + saved collections)
   const finalCategories = useMemo(() => {
@@ -649,13 +717,27 @@ export default function App() {
             </h1>
           </div>
           <div className="flex flex-col items-end gap-2">
-            <button 
-              onClick={logout}
-              className="text-slate-400 p-2 hover:text-slate-600 transition-colors"
-              title="Déconnexion"
-            >
-              <LogOut size={20} />
-            </button>
+            <div className="flex items-center gap-2">
+              {'Notification' in window && (
+                <button 
+                  onClick={requestNotificationPermission}
+                  className={cn(
+                    "p-2 rounded-full transition-all",
+                    browserNotificationsEnabled ? "text-emerald-500 bg-emerald-50" : "text-slate-400 hover:text-slate-600 bg-slate-50"
+                  )}
+                  title={browserNotificationsEnabled ? "Notifications activées" : "Activer les notifications"}
+                >
+                  {browserNotificationsEnabled ? <Bell size={18} /> : <BellOff size={18} />}
+                </button>
+              )}
+              <button 
+                onClick={logout}
+                className="text-slate-400 p-2 hover:text-slate-600 transition-colors"
+                title="Déconnexion"
+              >
+                <LogOut size={20} />
+              </button>
+            </div>
             <div className="bg-slate-900 rounded-full p-1.5 flex gap-1 shadow-sm">
               <button 
                 onClick={() => { setModalType(TransactionType.INCOME); setIsModalOpen(true); }}
@@ -1264,12 +1346,53 @@ export default function App() {
       </main>
 
       {/* Navigation Bar */}
-      <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto p-4 bg-white/80 backdrop-blur-lg border-t border-slate-100 flex justify-between z-10 px-6">
+      <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto p-4 bg-white/80 backdrop-blur-lg border-t border-slate-100 flex justify-between z-40 px-6">
         <NavButton active={activeTab === 'summary'} onClick={() => setActiveTab('summary')} icon={<LayoutDashboard size={20} />} label="Stats" />
         <NavButton active={activeTab === 'history'} onClick={() => setActiveTab('history')} icon={<History size={20} />} label="Journal" />
         <NavButton active={activeTab === 'analytics'} onClick={() => setActiveTab('analytics')} icon={<ChartIcon size={20} />} label="Analyse" />
         <NavButton active={activeTab === 'budgets'} onClick={() => setActiveTab('budgets')} icon={<Target size={20} />} label="Budgets" />
       </nav>
+
+      {/* Notifications Overlay */}
+      <div className="fixed top-6 left-6 right-6 z-[60] pointer-events-none flex flex-col gap-3">
+        <AnimatePresence>
+          {notifications.map(notif => (
+            <motion.div
+              key={notif.id}
+              initial={{ opacity: 0, y: -20, scale: 0.9 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9, y: -10 }}
+              className={cn(
+                "w-full pointer-events-auto p-4 rounded-3xl shadow-xl border flex items-start gap-3 backdrop-blur-md",
+                notif.type === 'error' ? "bg-rose-50/90 border-rose-100" : "bg-amber-50/90 border-amber-100"
+              )}
+            >
+              <div className={cn(
+                "p-2 rounded-2xl",
+                notif.type === 'error' ? "bg-rose-500 text-white" : "bg-amber-500 text-white"
+              )}>
+                <AlertCircle size={20} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h4 className={cn(
+                  "text-sm font-bold truncate",
+                  notif.type === 'error' ? "text-rose-900" : "text-amber-900"
+                )}>{notif.title}</h4>
+                <p className={cn(
+                  "text-xs font-medium opacity-80",
+                  notif.type === 'error' ? "text-rose-800" : "text-amber-800"
+                )}>{notif.message}</p>
+              </div>
+              <button 
+                onClick={() => setNotifications(prev => prev.filter(n => n.id !== notif.id))}
+                className="text-slate-400 hover:text-slate-600 p-1"
+              >
+                <X size={16} />
+              </button>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
 
       {/* Delete Confirmation Modal */}
       <AnimatePresence>
