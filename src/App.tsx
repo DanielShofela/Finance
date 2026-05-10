@@ -23,7 +23,10 @@ import {
   Loader2,
   Trash2,
   Edit2,
-  Target
+  Target,
+  Filter,
+  ChevronDown,
+  XCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -36,7 +39,9 @@ import {
   subDays,
   parseISO,
   eachDayOfInterval,
-  isSameDay
+  isSameDay,
+  addDays,
+  differenceInDays
 } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { 
@@ -141,6 +146,11 @@ export default function App() {
   const [period, setPeriod] = useState<'week' | 'month'>('month');
   const [historyStartDate, setHistoryStartDate] = useState<string>('');
   const [historyEndDate, setHistoryEndDate] = useState<string>('');
+  const [analyticsStartDate, setAnalyticsStartDate] = useState<string>('');
+  const [analyticsEndDate, setAnalyticsEndDate] = useState<string>('');
+  const [analyticsTypeFilter, setAnalyticsTypeFilter] = useState<'all' | TransactionType>('all');
+  const [analyticsCategoryFilter, setAnalyticsCategoryFilter] = useState<string[]>([]);
+  const [isFilterExpanded, setIsFilterExpanded] = useState(false);
 
   // Auth Listener
   useEffect(() => {
@@ -315,14 +325,62 @@ export default function App() {
     });
   }, [currentPeriodTransactions, period]);
 
+  const analyticsFilteredTransactions = useMemo(() => {
+    return transactions.filter(t => {
+      if (analyticsStartDate && t.date < analyticsStartDate) return false;
+      if (analyticsEndDate && t.date > analyticsEndDate) return false;
+      if (analyticsTypeFilter !== 'all' && t.type !== analyticsTypeFilter) return false;
+      if (analyticsCategoryFilter.length > 0 && !analyticsCategoryFilter.includes(t.category)) return false;
+      return true;
+    });
+  }, [transactions, analyticsStartDate, analyticsEndDate, analyticsTypeFilter, analyticsCategoryFilter]);
+
   const analytics = useMemo(() => {
-    if (dailyData.length === 0) return null;
+    if (analyticsFilteredTransactions.length === 0) return null;
     
-    const sortedExpenses = [...dailyData].sort((a, b) => b.expense - a.expense);
-    const sortedIncomes = [...dailyData].sort((a, b) => b.income - a.income);
+    // Daily breakdown for the filtered period
+    // If dates are provided, use those, otherwise use current month for the chart
+    let start, end;
+    if (analyticsStartDate && analyticsEndDate) {
+      start = parseISO(analyticsStartDate);
+      end = parseISO(analyticsEndDate);
+    } else {
+      const now = new Date();
+      start = startOfMonth(now);
+      end = endOfMonth(now);
+    }
+
+    // Safety check for invalid intervals
+    if (start > end) {
+      const temp = start;
+      start = end;
+      end = temp;
+    }
+
+    // Limit range to prevent massive computations (max 90 days)
+    const daysDiff = Math.abs(differenceInDays(start, end));
+    if (daysDiff > 90) {
+      end = addDays(start, 90);
+    }
+
+    const days = eachDayOfInterval({ start, end });
+    const localDailyData = days.map(day => {
+      const dayTransactions = analyticsFilteredTransactions.filter(t => isSameDay(parseISO(t.date), day));
+      const income = dayTransactions.filter(t => t.type === TransactionType.INCOME).reduce((sum, t) => sum + t.amount, 0);
+      const expense = dayTransactions.filter(t => t.type === TransactionType.EXPENSE).reduce((sum, t) => sum + t.amount, 0);
+      return {
+        name: format(day, 'dd/MM', { locale: fr }),
+        income,
+        expense,
+        fullDate: day
+      };
+    });
+
+    const sortedExpenses = [...localDailyData].sort((a, b) => b.expense - a.expense);
+    const sortedIncomes = [...localDailyData].sort((a, b) => b.income - a.income);
     
     // Stats par catégorie
-    const categoryStats = transactions.reduce((acc, t) => {
+    const categoryStats = analyticsFilteredTransactions.reduce((acc, t) => {
       const key = `${t.type}-${t.category}`;
       if (!acc[key]) acc[key] = { name: t.category, type: t.type, total: 0, count: 0 };
       acc[key].total += t.amount;
@@ -330,8 +388,8 @@ export default function App() {
       return acc;
     }, {} as Record<string, { name: string, type: TransactionType, total: number, count: number }>);
 
-    // Stats par note (raisons fréquentes)
-    const noteStats = transactions
+    // Stats par note
+    const noteStats = analyticsFilteredTransactions
       .filter(t => t.type === TransactionType.EXPENSE && t.description)
       .reduce((acc, t) => {
         const key = t.description!;
@@ -341,14 +399,23 @@ export default function App() {
       }, {} as Record<string, { text: string, total: number, category: string }>);
 
     return {
+      dailyData: localDailyData,
       topExpenseDay: sortedExpenses[0],
-      minExpenseDay: [...dailyData].filter(d => d.expense > 0).sort((a, b) => a.expense - b.expense)[0],
+      minExpenseDay: [...localDailyData].filter(d => d.expense > 0).sort((a, b) => a.expense - b.expense)[0],
       topIncomeDay: sortedIncomes[0],
-      minIncomeDay: [...dailyData].filter(d => d.income > 0).sort((a, b) => a.income - b.income)[0],
-      categoryBreakdown: Object.values(categoryStats).sort((a, b) => (b as any).total - (a as any).total),
-      noteBreakdown: Object.values(noteStats).sort((a, b) => (b as any).total - (a as any).total).slice(0, 5)
+      minIncomeDay: [...localDailyData].filter(d => d.income > 0).sort((a, b) => a.income - b.income)[0],
+      categoryBreakdown: Object.values(categoryStats).sort((a: any, b: any) => b.total - a.total),
+      noteBreakdown: Object.values(noteStats).sort((a: any, b: any) => b.total - a.total).slice(0, 5)
     };
-  }, [dailyData, transactions]);
+  }, [analyticsFilteredTransactions, analyticsStartDate, analyticsEndDate]);
+
+  const analyticsTotals = useMemo(() => {
+    return analyticsFilteredTransactions.reduce((acc, t) => {
+      if (t.type === TransactionType.INCOME) acc.income += t.amount;
+      else acc.expense += t.amount;
+      return acc;
+    }, { income: 0, expense: 0 });
+  }, [analyticsFilteredTransactions]);
 
   const budgetProgress = useMemo(() => {
     const now = new Date();
@@ -825,15 +892,125 @@ export default function App() {
               exit={{ opacity: 0, x: -20 }}
               className="space-y-6"
             >
-              <div className="flex justify-between items-center">
-                <h3 className="text-xl font-semibold text-slate-800">Analyses {period === 'week' ? 'Hebdo' : 'Mensuelle'}</h3>
-                <div className="flex bg-slate-100 p-1 rounded-lg">
-                  <button onClick={() => setPeriod('week')} className={cn("px-3 py-1 text-xs transition-all rounded-md", period === 'week' ? "bg-white shadow-sm" : "text-slate-500")}>Sem</button>
-                  <button onClick={() => setPeriod('month')} className={cn("px-3 py-1 text-xs transition-all rounded-md", period === 'month' ? "bg-white shadow-sm" : "text-slate-500")}>Mois</button>
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-xl font-semibold text-slate-800">Analyses</h3>
+                  <div className="flex gap-2">
+                    {(analyticsStartDate || analyticsEndDate || analyticsTypeFilter !== 'all' || analyticsCategoryFilter.length > 0) && (
+                      <button 
+                        onClick={() => {
+                          setAnalyticsStartDate('');
+                          setAnalyticsEndDate('');
+                          setAnalyticsTypeFilter('all');
+                          setAnalyticsCategoryFilter([]);
+                        }}
+                        className="p-2 text-rose-500 bg-rose-50 rounded-xl hover:bg-rose-100 transition-colors"
+                      >
+                        <XCircle size={18} />
+                      </button>
+                    )}
+                    <button 
+                      onClick={() => setIsFilterExpanded(!isFilterExpanded)}
+                      className={cn(
+                        "flex items-center gap-2 px-4 py-2 rounded-xl transition-all font-bold text-xs uppercase tracking-widest shadow-sm",
+                        isFilterExpanded ? "bg-slate-900 text-white" : "bg-white text-slate-600 border border-slate-100"
+                      )}
+                    >
+                      <Filter size={14} />
+                      Filtres
+                    </button>
+                  </div>
                 </div>
+
+                <AnimatePresence>
+                  {isFilterExpanded && (
+                    <motion.div 
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="bg-white p-6 rounded-[32px] shadow-sm border border-slate-100 space-y-6">
+                        {/* Dates */}
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2 px-1">Du</label>
+                            <input 
+                              type="date"
+                              value={analyticsStartDate}
+                              onChange={(e) => setAnalyticsStartDate(e.target.value)}
+                              className="w-full bg-slate-50 border-none rounded-xl p-3 text-xs font-bold text-slate-700 outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2 px-1">Au</label>
+                            <input 
+                              type="date"
+                              value={analyticsEndDate}
+                              onChange={(e) => setAnalyticsEndDate(e.target.value)}
+                              className="w-full bg-slate-50 border-none rounded-xl p-3 text-xs font-bold text-slate-700 outline-none"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Type */}
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2 px-1">Type</label>
+                          <div className="flex bg-slate-50 p-1 rounded-xl">
+                            <button 
+                              onClick={() => setAnalyticsTypeFilter('all')}
+                              className={cn("flex-1 py-2 text-xs font-bold rounded-lg transition-all", analyticsTypeFilter === 'all' ? "bg-white shadow-sm text-slate-900" : "text-slate-400")}
+                            >
+                              Tout
+                            </button>
+                            <button 
+                              onClick={() => setAnalyticsTypeFilter(TransactionType.INCOME)}
+                              className={cn("flex-1 py-2 text-xs font-bold rounded-lg transition-all", analyticsTypeFilter === TransactionType.INCOME ? "bg-white shadow-sm text-emerald-600" : "text-slate-400")}
+                            >
+                              Revenus
+                            </button>
+                            <button 
+                              onClick={() => setAnalyticsTypeFilter(TransactionType.EXPENSE)}
+                              className={cn("flex-1 py-2 text-xs font-bold rounded-lg transition-all", analyticsTypeFilter === TransactionType.EXPENSE ? "bg-white shadow-sm text-rose-600" : "text-slate-400")}
+                            >
+                              Dépenses
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Categories */}
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-3 px-1">Catégories</label>
+                          <div className="flex flex-wrap gap-2">
+                            {(analyticsTypeFilter === 'all' ? [...finalCategories.income, ...finalCategories.expense] : analyticsTypeFilter === TransactionType.INCOME ? finalCategories.income : finalCategories.expense).map(cat => (
+                              <button 
+                                key={cat}
+                                onClick={() => {
+                                  setAnalyticsCategoryFilter(prev => 
+                                    prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]
+                                  )
+                                }}
+                                className={cn(
+                                  "px-3 py-1.5 rounded-full text-[10px] font-bold transition-all border",
+                                  analyticsCategoryFilter.includes(cat) 
+                                    ? "bg-slate-900 text-white border-slate-900" 
+                                    : "bg-white text-slate-400 border-slate-100 hover:bg-slate-50"
+                                )}
+                              >
+                                {cat}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              {analytics ? (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
                 <AnalyticCard 
                   title="Dépense Max" 
                   item={analytics?.topExpenseDay} 
@@ -938,8 +1115,8 @@ export default function App() {
                       <div className="h-2.5 bg-slate-50 rounded-full overflow-hidden">
                         <motion.div 
                           initial={{ width: 0 }}
-                          animate={{ width: `${totals.expense > 0 ? (cat.total / totals.expense) * 100 : 0}%` }}
-                          className="h-full bg-slate-900 rounded-full"
+                          animate={{ width: `${(cat.type === TransactionType.INCOME ? analyticsTotals.income : analyticsTotals.expense) > 0 ? (cat.total / (cat.type === TransactionType.INCOME ? analyticsTotals.income : analyticsTotals.expense)) * 100 : 0}%` }}
+                          className={cn("h-full rounded-full", cat.type === TransactionType.INCOME ? "bg-emerald-500" : "bg-slate-900")}
                         />
                       </div>
                     </div>
@@ -973,18 +1150,15 @@ export default function App() {
                 <h4 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4">Volume par jour</h4>
                 <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={dailyData}>
+                    <BarChart data={analytics?.dailyData || []}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                       <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
                       <Tooltip 
                         cursor={{ fill: '#f8fafc' }} 
-                        formatter={(value: any) => [`${value.toLocaleString('fr-FR')} FCFA`, 'Dépenses']}
+                        formatter={(value: any) => [`${value.toLocaleString('fr-FR')} FCFA`, 'Montant']}
                       />
-                      <Bar name="Dépenses" dataKey="expense" radius={[4, 4, 0, 0]}>
-                        {dailyData.map((entry, index) => (
-                           <Cell key={`cell-${index}`} fill={entry.expense > entry.income ? '#fda4af' : '#e2e8f0'} />
-                        ))}
-                      </Bar>
+                      <Bar name="Revenus" dataKey="income" fill="#10b981" radius={[4, 4, 0, 0]} hide={analyticsTypeFilter === TransactionType.EXPENSE} />
+                      <Bar name="Dépenses" dataKey="expense" fill="#f43f5e" radius={[4, 4, 0, 0]} hide={analyticsTypeFilter === TransactionType.INCOME} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -992,7 +1166,15 @@ export default function App() {
                   * Les barres roses indiquent les jours où les dépenses excèdent les revenus.
                 </p>
               </div>
-            </motion.div>
+            </>
+          ) : (
+            <div className="text-center py-32 bg-white/30 rounded-[40px] border border-dashed border-slate-200">
+              <ChartIcon className="mx-auto text-slate-200 mb-4" size={48} />
+              <h4 className="text-slate-700 font-bold mb-1">Aucune donnée</h4>
+              <p className="text-slate-400 text-sm max-w-[200px] mx-auto">Ajustez les filtres pour visualiser vos statistiques.</p>
+            </div>
+          )}
+        </motion.div>
           )}
 
           {activeTab === 'budgets' && (
