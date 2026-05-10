@@ -877,27 +877,18 @@ export default function App() {
                 </div>
                 <div className="bg-white p-4 rounded-3xl shadow-sm border border-slate-100 h-64">
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={dailyData}>
-                      <defs>
-                        <linearGradient id="colorIncome" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.1}/>
-                          <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                        </linearGradient>
-                        <linearGradient id="colorExpense" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#ef4444" stopOpacity={0.1}/>
-                          <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
+                    <BarChart data={dailyData}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                       <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94a3b8' }} />
                       <Tooltip 
                         contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
                         labelStyle={{ fontWeight: 'bold', marginBottom: '4px' }}
                         labelFormatter={(value) => `Date : ${value}`}
+                        formatter={(value) => [`${Number(value).toLocaleString('fr-FR')} FCFA`, '']}
                       />
-                      <Area name="Revenus" type="monotone" dataKey="income" stroke="#10b981" fillOpacity={1} fill="url(#colorIncome)" strokeWidth={2} />
-                      <Area name="Dépenses" type="monotone" dataKey="expense" stroke="#ef4444" fillOpacity={1} fill="url(#colorExpense)" strokeWidth={2} />
-                    </AreaChart>
+                      <Bar name="Revenus" dataKey="income" stackId="a" fill="#10b981" radius={[0, 0, 0, 0]} />
+                      <Bar name="Dépenses" dataKey="expense" stackId="a" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                    </BarChart>
                   </ResponsiveContainer>
                 </div>
               </section>
