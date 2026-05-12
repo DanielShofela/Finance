@@ -353,9 +353,15 @@ export default function App() {
       ? { start: startOfWeek(now, { weekStartsOn: 1 }), end: endOfWeek(now, { weekStartsOn: 1 }) }
       : { start: startOfMonth(now), end: endOfMonth(now) };
     
-    return transactions.filter(t => 
-      isWithinInterval(parseISO(t.date), interval)
-    );
+    return transactions.filter(t => {
+      try {
+        const d = parseISO(t.date);
+        if (isNaN(d.getTime())) return false;
+        return isWithinInterval(d, interval);
+      } catch {
+        return false;
+      }
+    });
   }, [transactions, period]);
 
   const dailyData = useMemo(() => {
@@ -751,8 +757,7 @@ export default function App() {
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-brand-bg w-full relative">
-      <div className="flex flex-col min-h-screen bg-brand-bg max-w-lg mx-auto w-full relative border-x border-slate-100 shadow-2xl">
+    <div className="flex flex-col min-h-[100dvh] bg-brand-bg max-w-lg mx-auto w-full relative border-x border-slate-100 shadow-2xl overflow-x-hidden">
       {/* Header */}
       <header className="p-6 pt-8 bg-white/50 backdrop-blur-sm sticky top-0 z-20">
         <div className="flex justify-between items-start mb-6">
@@ -1578,7 +1583,7 @@ export default function App() {
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="relative w-full max-w-md bg-white rounded-t-[32px] p-8 shadow-2xl overflow-hidden"
+              className="relative w-full max-w-md bg-white rounded-t-[32px] p-8 pb-12 shadow-2xl overflow-y-auto max-h-[92vh]"
             >
                <div className="w-12 h-1.5 bg-slate-100 rounded-full mx-auto mb-6" />
                <header className="flex justify-between items-center mb-8">
@@ -1622,7 +1627,7 @@ export default function App() {
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="relative w-full max-w-md bg-white rounded-t-[32px] p-8 shadow-2xl overflow-hidden"
+              className="relative w-full max-w-md bg-white rounded-t-[32px] p-8 pb-12 shadow-2xl overflow-y-auto max-h-[92vh]"
             >
                <div className="w-12 h-1.5 bg-slate-100 rounded-full mx-auto mb-6" />
                <header className="flex justify-between items-center mb-8">
@@ -1651,7 +1656,6 @@ export default function App() {
           </div>
         )}
       </AnimatePresence>
-    </div>
     </div>
   );
 }
@@ -1760,17 +1764,24 @@ function TransactionForm({ type, onSubmit, initialData, availableCategories, ava
   const [date, setDate] = useState(initialData ? format(parseISO(initialData.date), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'));
   const [description, setDescription] = useState(initialData?.description || '');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!amount) return;
+    if (!amount || isSubmitting) return;
     
-    onSubmit({
-      amount: parseFloat(amount),
-      type,
-      category: category.trim() || 'Autre',
-      date: new Date(date).toISOString(),
-      description: description.trim() || undefined
-    });
+    setIsSubmitting(true);
+    try {
+      await onSubmit({
+        amount: parseFloat(amount.replace(',', '.')),
+        type,
+        category: category.trim() || 'Autre',
+        date: new Date(date).toISOString(),
+        description: description.trim() || undefined
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -1779,6 +1790,8 @@ function TransactionForm({ type, onSubmit, initialData, availableCategories, ava
         <span className="absolute left-6 top-1/2 -translate-y-1/2 text-lg font-bold text-slate-300">FCFA</span>
         <input 
           type="number" 
+          inputMode="decimal"
+          step="any"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
           placeholder="0"
@@ -1817,12 +1830,21 @@ function TransactionForm({ type, onSubmit, initialData, availableCategories, ava
 
       <button 
         type="submit" 
+        disabled={isSubmitting}
         className={cn(
-          "w-full py-4 rounded-2xl text-white font-semibold text-lg shadow-lg active:scale-[0.98] transition-all",
-          type === TransactionType.INCOME ? "bg-brand-success shadow-emerald-200" : "bg-brand-danger shadow-rose-200"
+          "w-full py-4 rounded-2xl text-white font-semibold text-lg shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2",
+          type === TransactionType.INCOME ? "bg-brand-success shadow-emerald-200" : "bg-brand-danger shadow-rose-200",
+          isSubmitting && "opacity-70 animate-pulse"
         )}
       >
-        Confirmer
+        {isSubmitting ? (
+          <>
+            <Loader2 className="animate-spin" size={20} />
+            Patientez...
+          </>
+        ) : (
+          'Confirmer'
+        )}
       </button>
     </form>
   );
