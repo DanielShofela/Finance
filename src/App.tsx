@@ -112,7 +112,7 @@ interface FirestoreErrorInfo {
   }
 }
 
-function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null, setNotifications?: React.Dispatch<React.SetStateAction<any[]>>) {
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
@@ -130,7 +130,19 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
     path
   }
   console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
+  
+  if (setNotifications) {
+    const newNotif = {
+      id: Math.random().toString(36).substr(2, 9),
+      title: 'Erreur de connexion',
+      message: `Un problème est survenu (${operationType} sur ${path || 'données'}). Vérifiez votre connexion.`,
+      type: 'error' as const
+    };
+    setNotifications(prev => [newNotif, ...prev]);
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== newNotif.id));
+    }, 6000);
+  }
 }
 
 export default function App() {
@@ -236,7 +248,7 @@ export default function App() {
       const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Transaction));
       setTransactions(docs);
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'transactions');
+      handleFirestoreError(error, OperationType.LIST, 'transactions', setNotifications);
     });
 
     return unsubscribe;
@@ -258,7 +270,7 @@ export default function App() {
       const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Budget));
       setBudgets(docs);
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'budgets');
+      handleFirestoreError(error, OperationType.LIST, 'budgets', setNotifications);
     });
 
     return unsubscribe;
@@ -292,7 +304,7 @@ export default function App() {
       
       setUserCategories({ income, expense });
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'categories');
+      handleFirestoreError(error, OperationType.LIST, 'categories', setNotifications);
     });
 
     return unsubscribe;
@@ -315,7 +327,7 @@ export default function App() {
       const notes = snapshot.docs.map(d => d.data().text);
       setUserNotes(notes);
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'notes');
+      handleFirestoreError(error, OperationType.LIST, 'notes', setNotifications);
     });
 
     return unsubscribe;
@@ -649,7 +661,7 @@ export default function App() {
     } catch (error) {
       // Re-open if error
       setIsModalOpen(true);
-      handleFirestoreError(error, editingTransaction ? OperationType.UPDATE : OperationType.CREATE, 'transactions');
+      handleFirestoreError(error, editingTransaction ? OperationType.UPDATE : OperationType.CREATE, 'transactions', setNotifications);
     }
   };
 
@@ -674,7 +686,7 @@ export default function App() {
       setEditingBudget(null);
     } catch (error) {
       setIsBudgetModalOpen(true);
-      handleFirestoreError(error, editingBudget ? OperationType.UPDATE : OperationType.CREATE, 'budgets');
+      handleFirestoreError(error, editingBudget ? OperationType.UPDATE : OperationType.CREATE, 'budgets', setNotifications);
     }
   };
 
@@ -688,7 +700,7 @@ export default function App() {
     try {
       await deleteDoc(doc(db, 'transactions', id));
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `transactions/${id}`);
+      handleFirestoreError(error, OperationType.DELETE, `transactions/${id}`, setNotifications);
     }
   };
 
@@ -696,7 +708,7 @@ export default function App() {
     try {
       await deleteDoc(doc(db, 'budgets', id));
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `budgets/${id}`);
+      handleFirestoreError(error, OperationType.DELETE, `budgets/${id}`, setNotifications);
     }
   };
 
@@ -739,7 +751,8 @@ export default function App() {
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-brand-bg max-w-md mx-auto relative overflow-hidden">
+    <div className="flex flex-col min-h-screen bg-brand-bg w-full relative">
+      <div className="flex flex-col min-h-screen bg-brand-bg max-w-lg mx-auto w-full relative border-x border-slate-100 shadow-2xl">
       {/* Header */}
       <header className="p-6 pt-8 bg-white/50 backdrop-blur-sm sticky top-0 z-20">
         <div className="flex justify-between items-start mb-6">
@@ -1378,7 +1391,7 @@ export default function App() {
       </main>
 
       {/* Navigation Bar */}
-      <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto p-4 bg-white/80 backdrop-blur-lg border-t border-slate-100 flex justify-between z-40 px-6">
+      <nav className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto p-4 bg-white/90 backdrop-blur-xl border-t border-slate-100 flex justify-between z-40 px-6 pb-8 sm:pb-4 shadow-[0_-10px_30px_rgba(0,0,0,0.03)]">
         <NavButton active={activeTab === 'summary'} onClick={() => setActiveTab('summary')} icon={<LayoutDashboard size={20} />} label="Stats" />
         <NavButton active={activeTab === 'history'} onClick={() => setActiveTab('history')} icon={<History size={20} />} label="Journal" />
         <NavButton active={activeTab === 'analytics'} onClick={() => setActiveTab('analytics')} icon={<ChartIcon size={20} />} label="Analyse" />
@@ -1638,6 +1651,7 @@ export default function App() {
           </div>
         )}
       </AnimatePresence>
+    </div>
     </div>
   );
 }
